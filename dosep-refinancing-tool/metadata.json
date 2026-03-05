@@ -1,0 +1,5 @@
+{
+  "name": "DOSEP Refinancing Tool",
+  "description": "Herramienta administrativa para la anulación y refinanciación de órdenes de DOSEP, con desglose de cuotas e IDs de afiliado.",
+  "requestFramePermissions": []
+}
