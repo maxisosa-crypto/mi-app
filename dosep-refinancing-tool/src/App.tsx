@@ -27,7 +27,9 @@ import {
   UserRound,
   ChevronDown,
   Search,
-  User
+  User,
+  Percent,
+  Heart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
@@ -37,7 +39,14 @@ import { Installment, RefinanceResult, HistoryRecord, OrderEntry, LotSummary } f
 import { ChatAssistant } from './components/ChatAssistant';
 
 export default function App() {
-  // Form State
+  // ==========================================
+  // NAVEGACIÓN Y VISTAS
+  // ==========================================
+  const [vistaActiva, setVistaActiva] = useState('refinanciacion');
+
+  // ==========================================
+  // ESTADOS: REFINANCIACIÓN (DOSEP)
+  // ==========================================
   const [dni, setDni] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
   const [totalOrder, setTotalOrder] = useState<number | ''>('');
@@ -55,10 +64,7 @@ export default function App() {
   const [targetLotPaidInstallments, setTargetLotPaidInstallments] = useState<number | ''>('');
   const [newTotalInstallments, setNewTotalInstallments] = useState<number | ''>('');
 
-  // Batch State
   const [pendingOrders, setPendingOrders] = useState<OrderEntry[]>([]);
-
-  // Result State
   const [result, setResult] = useState<RefinanceResult | null>(null);
   const [processing, setProcessing] = useState(false);
   const [generatedMails, setGeneratedMails] = useState<{lot: string, content: string}[]>([]);
@@ -68,14 +74,37 @@ export default function App() {
   const [cancellingOrder, setCancellingOrder] = useState<{order: OrderEntry, lotNumber?: string} | null>(null);
   const [cancelDni, setCancelDni] = useState('');
 
-  // Load history on mount
+  // ==========================================
+  // ESTADOS: CALCULADORA DE AJUSTE
+  // ==========================================
+  const [calcOrigen, setCalcOrigen] = useState('');
+  const [calcDestino, setCalcDestino] = useState('');
+  const [calcResultado, setCalcResultado] = useState<{porcentaje: number, tipo: string} | null>(null);
+
+  // ==========================================
+  // ESTADOS: PLAN MUJER
+  // ==========================================
+  const [pmDni, setPmDni] = useState('');
+  const [pmFechaNac, setPmFechaNac] = useState('');
+  const [pmResultado, setPmResultado] = useState<{dni: string, edad: number, dia: string, mes: string, anio: number} | null>(null);
+  const [pmHistorial, setPmHistorial] = useState<any[]>([]);
+  const [pmShowHistory, setPmShowHistory] = useState(false);
+  const [pmSearch, setPmSearch] = useState('');
+  const [pmDesde, setPmDesde] = useState('');
+  const [pmHasta, setPmHasta] = useState('');
+
+  // Cargar historiales al iniciar
   useEffect(() => {
     const savedHistory = localStorage.getItem('dosep_history');
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
-    }
+    if (savedHistory) setHistory(JSON.parse(savedHistory));
+
+    const savedPmHistory = localStorage.getItem('historialPlanMujer');
+    if (savedPmHistory) setPmHistorial(JSON.parse(savedPmHistory));
   }, []);
 
+  // ==========================================
+  // FUNCIONES: REFINANCIACIÓN
+  // ==========================================
   const saveToHistory = (record: Omit<HistoryRecord, 'id' | 'timestamp'>) => {
     const newRecord: HistoryRecord = {
       ...record,
@@ -119,22 +148,11 @@ export default function App() {
   };
 
   const resetForm = () => {
-    setDni('');
-    setOrderNumber('');
-    setTotalOrder('');
-    setTotalInstallments('');
-    setPaidInstallments('');
-    setPaymentMethod('financiado');
-    setIsSpecialPlan('no');
-    setDppLotNumber('');
-    setDppLotTotal('');
-    setStartAffiliateId('181225864');
-    setIsFullyPaidLot(false);
-    setTargetCreditLotNumber('');
-    setTargetLotTotal('');
-    setTargetLotInstallments('');
-    setTargetLotPaidInstallments('');
-    setNewTotalInstallments('');
+    setDni(''); setOrderNumber(''); setTotalOrder(''); setTotalInstallments('');
+    setPaidInstallments(''); setPaymentMethod('financiado'); setIsSpecialPlan('no');
+    setDppLotNumber(''); setDppLotTotal(''); setStartAffiliateId('181225864');
+    setIsFullyPaidLot(false); setTargetCreditLotNumber(''); setTargetLotTotal('');
+    setTargetLotInstallments(''); setTargetLotPaidInstallments(''); setNewTotalInstallments('');
   };
 
   const addOrderToBatch = () => {
@@ -142,30 +160,23 @@ export default function App() {
       alert('Por favor complete los campos obligatorios (DNI, Orden, Total, Cuotas).');
       return;
     }
-
     if (Number(totalOrder) <= 0 || Number(totalInstallments) <= 0) {
       alert('El total de la orden y las cuotas deben ser mayores a cero.');
       return;
     }
-
     if (Number(paidInstallments) > Number(totalInstallments)) {
       alert('Las cuotas cobradas no pueden ser mayores a las cuotas totales.');
       return;
     }
-
     if (paymentMethod === 'financiado' && (!dppLotNumber || dppLotTotal === '')) {
       alert('Debe ingresar el número de lote DPP y su total.');
       return;
     }
 
     const newOrder: OrderEntry = {
-      id: crypto.randomUUID(),
-      dni,
-      orderNumber,
-      totalOrder: Number(totalOrder),
-      totalInstallments: Number(totalInstallments),
-      paidInstallments: Number(paidInstallments || 0),
-      paymentMethod,
+      id: crypto.randomUUID(), dni, orderNumber,
+      totalOrder: Number(totalOrder), totalInstallments: Number(totalInstallments),
+      paidInstallments: Number(paidInstallments || 0), paymentMethod,
       isSpecialPlan: isSpecialPlan === 'si',
       dppLotNumber: paymentMethod === 'financiado' ? dppLotNumber : undefined,
       dppLotTotal: paymentMethod === 'financiado' ? Number(dppLotTotal) : undefined,
@@ -179,291 +190,171 @@ export default function App() {
     };
 
     setPendingOrders([...pendingOrders, newOrder]);
-    
-    // Reset fields for next order but keep Lot info if same lot
-    setOrderNumber('');
-    setTotalOrder('');
-    setIsFullyPaidLot(false);
-    setTargetCreditLotNumber('');
-    setTargetLotTotal('');
-    setTargetLotInstallments('');
-    setTargetLotPaidInstallments('');
-    setNewTotalInstallments('');
+    setOrderNumber(''); setTotalOrder(''); setIsFullyPaidLot(false);
+    setTargetCreditLotNumber(''); setTargetLotTotal('');
+    setTargetLotInstallments(''); setTargetLotPaidInstallments(''); setNewTotalInstallments('');
   };
 
-  const removeOrderFromBatch = (id: string) => {
-    setPendingOrders(pendingOrders.filter(o => o.id !== id));
-  };
+  const removeOrderFromBatch = (id: string) => setPendingOrders(pendingOrders.filter(o => o.id !== id));
 
   const handleProcessBatch = () => {
-    if (pendingOrders.length === 0) {
-      alert('No hay órdenes en la lista para procesar.');
-      return;
-    }
-
+    if (pendingOrders.length === 0) { alert('No hay órdenes en la lista para procesar.'); return; }
     setProcessing(true);
 
-    // Simulate processing delay for better UX
     setTimeout(() => {
       const dppOrders = pendingOrders.filter(o => o.paymentMethod === 'financiado' && !o.isSpecialPlan);
-    const otherOrders = pendingOrders.filter(o => o.paymentMethod !== 'financiado' || o.isSpecialPlan);
+      const otherOrders = pendingOrders.filter(o => o.paymentMethod !== 'financiado' || o.isSpecialPlan);
+      const adjustedLotGroups: any = {};
 
-    // Group by the lot that will be ADJUSTED
-    const adjustedLotGroups: { [key: string]: { 
-      ordersToCancel: OrderEntry[], 
-      incomingCredits: OrderEntry[],
-      lotInfo: { total: number, installments: number, paid: number, startId: string, newTotalInstallments?: number } 
-    } } = {};
-
-    dppOrders.forEach(o => {
-      const targetLotNum = o.isFullyPaidLot ? o.targetCreditLotNumber! : o.dppLotNumber!;
-      
-      if (!adjustedLotGroups[targetLotNum]) {
-        adjustedLotGroups[targetLotNum] = { 
-          ordersToCancel: [], 
-          incomingCredits: [],
-          lotInfo: { 
-            total: o.isFullyPaidLot ? (o.targetLotTotal || 0) : (o.dppLotTotal || 0),
-            installments: o.isFullyPaidLot ? (o.targetLotInstallments || 0) : o.totalInstallments,
-            paid: o.isFullyPaidLot ? (o.targetLotPaidInstallments || 0) : o.paidInstallments,
-            startId: o.startAffiliateId || '181225864',
-            newTotalInstallments: o.newTotalInstallments
-          }
-        };
-      } else if (o.newTotalInstallments) {
-        // Use the largest newTotalInstallments if multiple are provided for the same lot
-        adjustedLotGroups[targetLotNum].lotInfo.newTotalInstallments = Math.max(
-          adjustedLotGroups[targetLotNum].lotInfo.newTotalInstallments || 0,
-          o.newTotalInstallments
-        );
-      }
-
-      if (o.isFullyPaidLot) {
-        adjustedLotGroups[targetLotNum].incomingCredits.push(o);
-      } else {
-        adjustedLotGroups[targetLotNum].ordersToCancel.push(o);
-      }
-    });
-
-    const lotSummaries: LotSummary[] = [];
-    const mailLines: string[] = [];
-
-    Object.entries(adjustedLotGroups).forEach(([lotNum, group]) => {
-      const lotTotal = group.lotInfo.total;
-      const originalTotalCuotas = group.lotInfo.installments || 1; // Fallback to 1 to avoid div by zero
-      const totalCuotas = group.lotInfo.newTotalInstallments || originalTotalCuotas;
-      const cuotasCobradas = group.lotInfo.paid;
-      const startId = group.lotInfo.startId || '0';
-
-      let totalCancelledInLot = 0;
-      let incomingCredit = 0;
-      let montoYaPagadoAnuladas = 0;
-
-      // Orders that belong to THIS lot and are being cancelled
-      group.ordersToCancel.forEach(o => {
-        totalCancelledInLot += o.totalOrder;
-        
-        // Calculamos cuánto de esta orden ya se cobró (basado en el lote original)
-        const valorCuotaOrdenOriginal = originalTotalCuotas > 0 ? o.totalOrder / originalTotalCuotas : 0;
-        montoYaPagadoAnuladas += valorCuotaOrdenOriginal * cuotasCobradas;
-      });
-
-      // Credits coming from OTHER lots (already paid) into THIS lot
-      group.incomingCredits.forEach(o => {
-        incomingCredit += o.totalOrder;
-      });
-
-      const totalReduccion = totalCancelledInLot + incomingCredit;
-      const nuevoTotalLote = Math.max(0, lotTotal - totalReduccion);
-      const valorCuotaOriginal = originalTotalCuotas > 0 ? lotTotal / originalTotalCuotas : 0;
-      
-      const totalYaCobrado = cuotasCobradas * valorCuotaOriginal;
-      const saldoRemanente = Math.max(0, nuevoTotalLote - totalYaCobrado);
-      const cuotasRestantes = Math.max(0, totalCuotas - cuotasCobradas);
-      
-      let nuevoValorCuota = 0;
-      if (cuotasRestantes > 0) {
-        nuevoValorCuota = Math.round((saldoRemanente / cuotasRestantes) * 100) / 100;
-      }
-
-      const installments: Installment[] = [];
-      let currentId = parseInt(startId) || 0;
-      let currentPendingSum = 0;
-      let pendingCount = 0;
-
-      for (let i = 1; i <= totalCuotas; i++) {
-        let amount = i <= cuotasCobradas ? valorCuotaOriginal : nuevoValorCuota;
-        
-        if (i > cuotasCobradas) {
-          pendingCount++;
-          // Adjust last installment for rounding
-          if (pendingCount === cuotasRestantes) {
-            amount = Math.max(0, saldoRemanente - currentPendingSum);
-          }
-          currentPendingSum += amount;
+      dppOrders.forEach(o => {
+        const targetLotNum = o.isFullyPaidLot ? o.targetCreditLotNumber! : o.dppLotNumber!;
+        if (!adjustedLotGroups[targetLotNum]) {
+          adjustedLotGroups[targetLotNum] = { 
+            ordersToCancel: [], incomingCredits: [],
+            lotInfo: { 
+              total: o.isFullyPaidLot ? (o.targetLotTotal || 0) : (o.dppLotTotal || 0),
+              installments: o.isFullyPaidLot ? (o.targetLotInstallments || 0) : o.totalInstallments,
+              paid: o.isFullyPaidLot ? (o.targetLotPaidInstallments || 0) : o.paidInstallments,
+              startId: o.startAffiliateId || '181225864',
+              newTotalInstallments: o.newTotalInstallments
+            }
+          };
+        } else if (o.newTotalInstallments) {
+          adjustedLotGroups[targetLotNum].lotInfo.newTotalInstallments = Math.max(
+            adjustedLotGroups[targetLotNum].lotInfo.newTotalInstallments || 0,
+            o.newTotalInstallments
+          );
         }
 
-        installments.push({
-          number: i,
-          status: i <= cuotasCobradas ? 'COBRADA' : 'PENDIENTE',
-          amount,
-          affiliateId: (currentId + (i - 1)).toString()
+        if (o.isFullyPaidLot) adjustedLotGroups[targetLotNum].incomingCredits.push(o);
+        else adjustedLotGroups[targetLotNum].ordersToCancel.push(o);
+      });
+
+      const lotSummaries: LotSummary[] = [];
+      const mailLines: string[] = [];
+
+      Object.entries(adjustedLotGroups).forEach(([lotNum, group]: [string, any]) => {
+        const lotTotal = group.lotInfo.total;
+        const originalTotalCuotas = group.lotInfo.installments || 1;
+        const totalCuotas = group.lotInfo.newTotalInstallments || originalTotalCuotas;
+        const cuotasCobradas = group.lotInfo.paid;
+        const startId = group.lotInfo.startId || '0';
+
+        let totalCancelledInLot = 0; let incomingCredit = 0; let montoYaPagadoAnuladas = 0;
+
+        group.ordersToCancel.forEach((o: any) => {
+          totalCancelledInLot += o.totalOrder;
+          const valorCuotaOrdenOriginal = originalTotalCuotas > 0 ? o.totalOrder / originalTotalCuotas : 0;
+          montoYaPagadoAnuladas += valorCuotaOrdenOriginal * cuotasCobradas;
         });
-      }
 
-      lotSummaries.push({
-        lotNumber: lotNum,
-        originalTotal: lotTotal,
-        adjustedTotal: nuevoTotalLote,
-        cancelledAmount: totalReduccion,
-        installmentAmount: nuevoValorCuota,
-        installments,
-        orders: [...group.ordersToCancel, ...group.incomingCredits],
-        details: {
-          cuotasCobradas,
-          cuotasRestantes,
-          totalCancelado: totalReduccion,
-          nuevoValorCuota,
-          saldoRemanente,
-          porcentajeCancelado: (totalReduccion / lotTotal) * 100,
-          montoYaPagadoAnuladas,
-          porcentajePagoOrden: totalCancelledInLot > 0 ? (montoYaPagadoAnuladas / totalCancelledInLot) * 100 : 0
-        }
-      });
+        group.incomingCredits.forEach((o: any) => incomingCredit += o.totalOrder);
 
-      // Group by DNI for email
-      const dniInLot: { [dni: string]: { orders: string[], credits: { sourceLot: string, amount: number }[] } } = {};
-      
-      group.ordersToCancel.forEach(o => {
-        if (!dniInLot[o.dni]) dniInLot[o.dni] = { orders: [], credits: [] };
-        dniInLot[o.dni].orders.push(o.orderNumber);
-      });
-
-      group.incomingCredits.forEach(o => {
-        if (!dniInLot[o.dni]) dniInLot[o.dni] = { orders: [], credits: [] };
-        dniInLot[o.dni].credits.push({ sourceLot: o.dppLotNumber!, amount: o.totalOrder });
-      });
-
-      Object.entries(dniInLot).forEach(([dni, data]) => {
-        const firstPendingInst = installments.find(inst => inst.status === 'PENDIENTE');
-        const formattedTotal = nuevoTotalLote.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
-        const formattedCuota = nuevoValorCuota.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+        const totalReduccion = totalCancelledInLot + incomingCredit;
+        const nuevoTotalLote = Math.max(0, lotTotal - totalReduccion);
+        const valorCuotaOriginal = originalTotalCuotas > 0 ? lotTotal / originalTotalCuotas : 0;
+        const totalYaCobrado = cuotasCobradas * valorCuotaOriginal;
+        const saldoRemanente = Math.max(0, nuevoTotalLote - totalYaCobrado);
+        const cuotasRestantes = Math.max(0, totalCuotas - cuotasCobradas);
         
-        let line = `DNI: ${dni}: modificar lote dpp ${lotNum} al valor de ${formattedTotal}`;
-        if (firstPendingInst) {
-          line += ` y modificar nro cta afiliado ${firstPendingInst.affiliateId} al valor de ${formattedCuota}`;
-        }
-        
-        const reasons: string[] = [];
-        if (data.orders.length > 0) {
-          reasons.push(`anulacion de orden ${data.orders.join(' y ')}`);
-        }
-        if (data.credits.length > 0) {
-          data.credits.forEach(c => {
-            reasons.push(`credito por orden anulada en lote ${c.sourceLot} (ya cobrado) por valor de ${c.amount.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}`);
+        let nuevoValorCuota = 0;
+        if (cuotasRestantes > 0) nuevoValorCuota = Math.round((saldoRemanente / cuotasRestantes) * 100) / 100;
+
+        const installments: Installment[] = [];
+        let currentId = parseInt(startId) || 0;
+        let currentPendingSum = 0;
+        let pendingCount = 0;
+
+        for (let i = 1; i <= totalCuotas; i++) {
+          let amount = i <= cuotasCobradas ? valorCuotaOriginal : nuevoValorCuota;
+          if (i > cuotasCobradas) {
+            pendingCount++;
+            if (pendingCount === cuotasRestantes) amount = Math.max(0, saldoRemanente - currentPendingSum);
+            currentPendingSum += amount;
+          }
+          installments.push({
+            number: i, status: i <= cuotasCobradas ? 'COBRADA' : 'PENDIENTE',
+            amount, affiliateId: (currentId + (i - 1)).toString()
           });
         }
-        
-        line += ` por ${reasons.join(' y ')}.`;
-        mailLines.push(line);
-      });
 
-      // Save to history
-      group.ordersToCancel.forEach(o => {
-        saveToHistory({
-          dni: o.dni,
-          orderNumber: o.orderNumber,
-          paymentMethod: 'Financiado (DPP)',
-          action: 'Recalculación de cuotas',
-          cancelledAmount: o.totalOrder,
-          lotNumber: lotNum
+        lotSummaries.push({
+          lotNumber: lotNum, originalTotal: lotTotal, adjustedTotal: nuevoTotalLote,
+          cancelledAmount: totalReduccion, installmentAmount: nuevoValorCuota,
+          installments, orders: [...group.ordersToCancel, ...group.incomingCredits],
+          details: {
+            cuotasCobradas, cuotasRestantes, totalCancelado: totalReduccion,
+            nuevoValorCuota, saldoRemanente, porcentajeCancelado: (totalReduccion / lotTotal) * 100,
+            montoYaPagadoAnuladas, porcentajePagoOrden: totalCancelledInLot > 0 ? (montoYaPagadoAnuladas / totalCancelledInLot) * 100 : 0
+          }
         });
-      });
-      group.incomingCredits.forEach(o => {
-        saveToHistory({
-          dni: o.dni,
-          orderNumber: o.orderNumber,
-          paymentMethod: 'Financiado (DPP)',
-          action: `Crédito aplicado al lote ${lotNum}`,
-          cancelledAmount: o.totalOrder,
-          lotNumber: o.dppLotNumber
+
+        const dniInLot: any = {};
+        group.ordersToCancel.forEach((o: any) => {
+          if (!dniInLot[o.dni]) dniInLot[o.dni] = { orders: [], credits: [] };
+          dniInLot[o.dni].orders.push(o.orderNumber);
         });
+        group.incomingCredits.forEach((o: any) => {
+          if (!dniInLot[o.dni]) dniInLot[o.dni] = { orders: [], credits: [] };
+          dniInLot[o.dni].credits.push({ sourceLot: o.dppLotNumber!, amount: o.totalOrder });
+        });
+
+        Object.entries(dniInLot).forEach(([dni, data]: [string, any]) => {
+          const firstPendingInst = installments.find(inst => inst.status === 'PENDIENTE');
+          const formattedTotal = nuevoTotalLote.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+          const formattedCuota = nuevoValorCuota.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+          
+          let line = `DNI: ${dni}: modificar lote dpp ${lotNum} al valor de ${formattedTotal}`;
+          if (firstPendingInst) line += ` y modificar nro cta afiliado ${firstPendingInst.affiliateId} al valor de ${formattedCuota}`;
+          
+          const reasons: string[] = [];
+          if (data.orders.length > 0) reasons.push(`anulacion de orden ${data.orders.join(' y ')}`);
+          if (data.credits.length > 0) {
+            data.credits.forEach((c: any) => reasons.push(`credito por orden anulada en lote ${c.sourceLot} (ya cobrado) por valor de ${c.amount.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}`));
+          }
+          line += ` por ${reasons.join(' y ')}.`;
+          mailLines.push(line);
+        });
+
+        group.ordersToCancel.forEach((o: any) => saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: 'Financiado (DPP)', action: 'Recalculación de cuotas', cancelledAmount: o.totalOrder, lotNumber: lotNum }));
+        group.incomingCredits.forEach((o: any) => saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: 'Financiado (DPP)', action: `Crédito aplicado al lote ${lotNum}`, cancelledAmount: o.totalOrder, lotNumber: o.dppLotNumber }));
       });
-    });
 
-    // Handle non-DPP or Special Plan orders
-    otherOrders.forEach(o => {
-      let action = '';
-      let cancelledAmount = o.totalOrder;
-      let method = o.paymentMethod;
-
-      if (o.isSpecialPlan) {
-        action = 'Anulación sin impacto económico';
-        cancelledAmount = 0;
-        method = 'Planes Especiales';
-      } else if (o.paymentMethod === 'caja') {
-        action = 'Generación de crédito';
-      } else {
-        action = 'Devolución de crédito';
-      }
-
-      saveToHistory({
-        dni: o.dni,
-        orderNumber: o.orderNumber,
-        paymentMethod: method,
-        action,
-        cancelledAmount
+      otherOrders.forEach(o => {
+        let action = ''; let cancelledAmount = o.totalOrder; let method = o.paymentMethod;
+        if (o.isSpecialPlan) { action = 'Anulación sin impacto económico'; cancelledAmount = 0; method = 'Planes Especiales'; }
+        else if (o.paymentMethod === 'caja') { action = 'Generación de crédito'; }
+        else { action = 'Devolución de crédito'; }
+        saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: method, action, cancelledAmount });
       });
-    });
 
-    const consolidatedMail = `Estimados:\n\nSe solicita modificación de los siguientes nro de cuenta afiliado y que los cambios se apliquen en la tabla CNT_historicodescuentosporplanilla en el caso de que ya se hayan generado:\n\n${mailLines.join('\n')}\n\nSe adjunta el excel con el desglose por afiliado.`;
+      const consolidatedMail = `Estimados:\n\nSe solicita modificación de los siguientes nro de cuenta afiliado y que los cambios se apliquen en la tabla CNT_historicodescuentosporplanilla en el caso de que ya se hayan generado:\n\n${mailLines.join('\n')}\n\nSe adjunta el excel con el desglose por afiliado.`;
 
-      setResult({
-        lots: lotSummaries,
-        otherOrders
-      });
-      if (lotSummaries.length > 0) {
-        setExpandedLot(lotSummaries[0].lotNumber);
-      }
+      setResult({ lots: lotSummaries, otherOrders });
+      if (lotSummaries.length > 0) setExpandedLot(lotSummaries[0].lotNumber);
       setGeneratedMails([{ lot: 'Consolidado', content: consolidatedMail }]);
-      setPendingOrders([]);
-      setProcessing(false);
+      setPendingOrders([]); setProcessing(false);
       alert('Lote de órdenes procesado correctamente.');
     }, 1500);
   };
 
   const handleCancelOrder = () => {
     if (!cancellingOrder) return;
-    
-    if (cancelDni !== cancellingOrder.order.dni) {
-      alert('El DNI ingresado no coincide con el de la orden.');
-      return;
-    }
+    if (cancelDni !== cancellingOrder.order.dni) { alert('El DNI ingresado no coincide con el de la orden.'); return; }
+    if (!window.confirm(`¿Está seguro de que desea ANULAR la orden ${cancellingOrder.order.orderNumber}? Esta acción se registrará en el historial.`)) return;
 
-    if (!window.confirm(`¿Está seguro de que desea ANULAR la orden ${cancellingOrder.order.orderNumber}? Esta acción se registrará en el historial.`)) {
-      return;
-    }
-
-    // Save to history
     saveToHistory({
-      dni: cancellingOrder.order.dni,
-      orderNumber: cancellingOrder.order.orderNumber,
-      paymentMethod: cancellingOrder.order.paymentMethod,
-      action: 'ANULACIÓN MANUAL POST-PROCESO',
-      cancelledAmount: cancellingOrder.order.totalOrder,
-      lotNumber: cancellingOrder.lotNumber
+      dni: cancellingOrder.order.dni, orderNumber: cancellingOrder.order.orderNumber,
+      paymentMethod: cancellingOrder.order.paymentMethod, action: 'ANULACIÓN MANUAL POST-PROCESO',
+      cancelledAmount: cancellingOrder.order.totalOrder, lotNumber: cancellingOrder.lotNumber
     });
 
-    // Update result state (remove order from result)
     if (result) {
       const newResult = { ...result };
       if (cancellingOrder.lotNumber) {
-        // It was in a lot
         newResult.lots = newResult.lots.map(lot => {
           if (lot.lotNumber === cancellingOrder.lotNumber) {
             const updatedOrders = lot.orders.filter(o => o.id !== cancellingOrder.order.id);
-            
-            // Re-calculate lot summary
             const removedAmount = cancellingOrder.order.totalOrder;
             const newCancelledAmount = Math.max(0, lot.cancelledAmount - removedAmount);
             const newAdjustedTotal = lot.originalTotal - newCancelledAmount;
@@ -480,71 +371,43 @@ export default function App() {
               const saldoRemanente = Math.max(0, newAdjustedTotal - totalYaCobrado);
               const nuevoValorCuota = cuotasRestantes > 0 ? Math.round((saldoRemanente / cuotasRestantes) * 100) / 100 : 0;
 
-              newDetails = {
-                ...newDetails,
-                totalCancelado: newCancelledAmount,
-                nuevoValorCuota,
-                saldoRemanente,
-                porcentajeCancelado: (newCancelledAmount / lot.originalTotal) * 100,
-              };
-
-              // Update installments array
+              newDetails = { ...newDetails, totalCancelado: newCancelledAmount, nuevoValorCuota, saldoRemanente, porcentajeCancelado: (newCancelledAmount / lot.originalTotal) * 100 };
+              
               let currentPendingSum = 0;
               updatedInstallments = updatedInstallments.map(inst => {
                 if (inst.status === 'PENDIENTE') {
                   let amount = nuevoValorCuota;
-                  // Adjust last installment for rounding
-                  if (inst.number === totalCuotas) {
-                    amount = Math.max(0, saldoRemanente - currentPendingSum);
-                  }
+                  if (inst.number === totalCuotas) amount = Math.max(0, saldoRemanente - currentPendingSum);
                   currentPendingSum += amount;
                   return { ...inst, amount };
                 }
                 return inst;
               });
             }
-
-            return {
-              ...lot,
-              orders: updatedOrders,
-              cancelledAmount: newCancelledAmount,
-              adjustedTotal: newAdjustedTotal,
-              details: newDetails,
-              installments: updatedInstallments
-            };
+            return { ...lot, orders: updatedOrders, cancelledAmount: newCancelledAmount, adjustedTotal: newAdjustedTotal, details: newDetails, installments: updatedInstallments };
           }
           return lot;
         });
       } else {
-        // It was in otherOrders
         newResult.otherOrders = newResult.otherOrders.filter(o => o.id !== cancellingOrder.order.id);
       }
       setResult(newResult);
     }
-
-    setCancellingOrder(null);
-    setCancelDni('');
+    setCancellingOrder(null); setCancelDni('');
     alert('Orden anulada exitosamente. El historial ha sido actualizado.');
   };
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert('Copiado al portapapeles');
-  };
+
+  const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text); alert('Copiado al portapapeles'); };
 
   const exportRefinanceExcel = async () => {
     if (!result) return;
-
     const workbook = new ExcelJS.Workbook();
-    
-    // Group everything by DNI
     const dniGroups: { [dni: string]: { lots: LotSummary[], others: OrderEntry[] } } = {};
 
     result.lots.forEach(lot => {
       lot.orders.forEach(order => {
         if (!dniGroups[order.dni]) dniGroups[order.dni] = { lots: [], others: [] };
-        if (!dniGroups[order.dni].lots.find(l => l.lotNumber === lot.lotNumber)) {
-          dniGroups[order.dni].lots.push(lot);
-        }
+        if (!dniGroups[order.dni].lots.find(l => l.lotNumber === lot.lotNumber)) dniGroups[order.dni].lots.push(lot);
       });
     });
 
@@ -557,25 +420,15 @@ export default function App() {
       const sheetName = dni.substring(0, 31);
       const worksheet = workbook.addWorksheet(sheetName);
 
-      // Column widths
-      worksheet.columns = [
-        { width: 15 }, // Cuota
-        { width: 30 }, // ID Afiliado
-        { width: 20 }, // Estado
-        { width: 20 }, // Monto
-      ];
-
-      // Title
+      worksheet.columns = [{ width: 15 }, { width: 30 }, { width: 20 }, { width: 20 }];
       const titleRow = worksheet.addRow(["REFINANCIACIÓN DOSEP - AFILIADO: " + dni]);
       titleRow.font = { bold: true, size: 14, color: { argb: 'FF000000' } };
       worksheet.mergeCells(`A${titleRow.number}:D${titleRow.number}`);
 
-      // Reference
       const refRow = worksheet.addRow(["Referencia: CNT_historicodescuentosporplanilla"]);
       refRow.font = { italic: true, size: 11, color: { argb: 'FF666666' } };
       worksheet.mergeCells(`A${refRow.number}:D${refRow.number}`);
-      
-      worksheet.addRow([]); // Spacer
+      worksheet.addRow([]);
 
       data.lots.forEach(lot => {
         const lotHeader = worksheet.addRow(["LOTE DPP Nº: " + lot.lotNumber]);
@@ -588,109 +441,64 @@ export default function App() {
 
         lot.orders.filter(o => o.dni === dni && !o.isFullyPaidLot).forEach(o => {
           const row = worksheet.addRow(["- Orden: " + o.orderNumber + " | Total Orden:", "", "", o.totalOrder]);
-          row.getCell(4).numFmt = '"$"#,##0.00';
-          row.getCell(4).font = { bold: true };
+          row.getCell(4).numFmt = '"$"#,##0.00'; row.getCell(4).font = { bold: true };
         });
 
-        // Credits applied
         const incomingCredits = result.lots.flatMap(l => l.orders).filter(o => o.dni === dni && o.isFullyPaidLot && o.targetCreditLotNumber === lot.lotNumber);
         if (incomingCredits.length > 0) {
           const creditHeader = worksheet.addRow(["Créditos aplicados desde otros lotes (ya cobrados):"]);
           creditHeader.font = { italic: true, color: { argb: 'FF008000' } };
           worksheet.mergeCells(`A${creditHeader.number}:D${creditHeader.number}`);
-          
           incomingCredits.forEach(c => {
             const row = worksheet.addRow([`- Desde Lote ${c.dppLotNumber} (Orden ${c.orderNumber}):`, "", "", c.totalOrder]);
-            row.getCell(4).numFmt = '"$"#,##0.00';
-            row.getCell(4).font = { bold: true };
+            row.getCell(4).numFmt = '"$"#,##0.00'; row.getCell(4).font = { bold: true };
           });
         }
 
-        worksheet.addRow([]); // Spacer
-        
+        worksheet.addRow([]);
         const breakdownTitle = worksheet.addRow(["DESGLOSE DE CUOTAS DEL LOTE (Recalculado)"]);
         breakdownTitle.font = { bold: true };
         worksheet.mergeCells(`A${breakdownTitle.number}:D${breakdownTitle.number}`);
 
-        // Table Header
         const headerRow = worksheet.addRow(["Cuota", "ID Afiliado (Nro Cta)", "Estado", "Monto"]);
         headerRow.eachCell((cell) => {
           cell.font = { bold: true, color: { argb: 'FF000000' } };
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFD9E1F2' } // Light blue header
-          };
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
-          };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
           cell.alignment = { horizontal: 'center' };
         });
 
-        // Installments
         lot.installments.forEach(inst => {
           const row = worksheet.addRow([inst.number, inst.affiliateId, inst.status, inst.amount]);
           row.getCell(4).numFmt = '"$"#,##0.00';
           row.eachCell((cell, colNumber) => {
-            cell.border = {
-              top: { style: 'thin' },
-              left: { style: 'thin' },
-              bottom: { style: 'thin' },
-              right: { style: 'thin' }
-            };
-            if (colNumber === 1 || colNumber === 3) {
-              cell.alignment = { horizontal: 'center' };
-            }
-            if (colNumber === 4) {
-              cell.alignment = { horizontal: 'right' };
-            }
-            if (inst.status === 'COBRADA') {
-              cell.font = { color: { argb: 'FF666666' } };
-            }
+            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            if (colNumber === 1 || colNumber === 3) cell.alignment = { horizontal: 'center' };
+            if (colNumber === 4) cell.alignment = { horizontal: 'right' };
+            if (inst.status === 'COBRADA') cell.font = { color: { argb: 'FF666666' } };
           });
         });
 
-        // Total Row
         const totalRow = worksheet.addRow(["--------------------------------------------------", "", "", lot.adjustedTotal]);
-        totalRow.getCell(4).numFmt = '"$"#,##0.00';
-        totalRow.getCell(4).font = { bold: true };
-        totalRow.getCell(4).fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFFFF00' } // Yellow highlight
-        };
-        totalRow.getCell(4).border = {
-          top: { style: 'medium' },
-          left: { style: 'medium' },
-          bottom: { style: 'medium' },
-          right: { style: 'medium' }
-        };
-
-        worksheet.addRow([]); // Spacer
-        worksheet.addRow([]); // Spacer
+        totalRow.getCell(4).numFmt = '"$"#,##0.00'; totalRow.getCell(4).font = { bold: true };
+        totalRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+        totalRow.getCell(4).border = { top: { style: 'medium' }, left: { style: 'medium' }, bottom: { style: 'medium' }, right: { style: 'medium' } };
+        worksheet.addRow([]); worksheet.addRow([]);
       });
 
       if (data.others.length > 0) {
         const otherTitle = worksheet.addRow(["OTRAS ÓRDENES (Caja / Crédito / Planes Especiales)"]);
         otherTitle.font = { bold: true };
         worksheet.mergeCells(`A${otherTitle.number}:D${otherTitle.number}`);
-
         const otherHeader = worksheet.addRow(["Orden", "Medio", "Acción", "Monto"]);
         otherHeader.eachCell((cell) => {
-          cell.font = { bold: true };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } }; // Light green
+          cell.font = { bold: true }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         });
-
         data.others.forEach(o => {
           const row = worksheet.addRow([o.orderNumber, o.paymentMethod, o.isSpecialPlan ? 'Planes Especiales' : 'Anulación', o.totalOrder]);
           row.getCell(4).numFmt = '"$"#,##0.00';
-          row.eachCell((cell) => {
-            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-          });
+          row.eachCell((cell) => { cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }; });
         });
       }
     }
@@ -700,9 +508,146 @@ export default function App() {
     saveAs(blob, `Refinanciacion_DOSEP_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // ==========================================
+  // FUNCIONES: CALCULADORA DE AJUSTE
+  // ==========================================
+  const handleCalcularAjuste = () => {
+    const o = parseFloat(calcOrigen);
+    const d = parseFloat(calcDestino);
+    if(isNaN(o) || isNaN(d) || o === 0) {
+        alert("Ingrese valores válidos y distintos de cero en el origen.");
+        return;
+    }
+    const porcentaje = ((d - o) / o) * 100;
+    let tipo = "nada";
+    if (porcentaje > 0) tipo = "aumento";
+    if (porcentaje < 0) tipo = "disminucion";
+    
+    setCalcResultado({ porcentaje: Math.abs(porcentaje), tipo });
+  };
+
+  // ==========================================
+  // FUNCIONES: PLAN MUJER
+  // ==========================================
+  const generarInformePlanMujer = () => {
+    const d = pmDni.trim();
+    const f = pmFechaNac.trim();
+    
+    if (!d) { alert("Por favor, ingresá el DNI de la paciente."); return; }
+    if (!f) { alert("Por favor, ingresá una fecha de nacimiento."); return; }
+
+    let dayStr, monthStr, yearStr;
+    let fechaLimpia = f.replace(/\s/g, '');
+
+    if (fechaLimpia.includes('/')) {
+        [dayStr, monthStr, yearStr] = fechaLimpia.split('/');
+    } else if (fechaLimpia.includes('-')) {
+        let partes = fechaLimpia.split('-');
+        if (partes[0].length === 4) { [yearStr, monthStr, dayStr] = partes; } 
+        else { [dayStr, monthStr, yearStr] = partes; }
+    } else if (fechaLimpia.length === 8) {
+        dayStr = fechaLimpia.substring(0, 2);
+        monthStr = fechaLimpia.substring(2, 4);
+        yearStr = fechaLimpia.substring(4, 8);
+    } else {
+        alert("No pudimos leer la fecha. Asegurate de que tenga el formato DD/MM/AAAA.");
+        return;
+    }
+
+    if (!yearStr || yearStr.length < 4 || !monthStr || !dayStr) {
+        alert("Revisá que la fecha esté completa, incluyendo el año de 4 dígitos (ej: 1988).");
+        return;
+    }
+
+    dayStr = dayStr.padStart(2, '0');
+    monthStr = monthStr.padStart(2, '0');
+    const fechaNacFormateada = `${dayStr}/${monthStr}/${yearStr}`;
+
+    const anioNacimiento = parseInt(yearStr);
+    const mesNacimiento = parseInt(monthStr) - 1;
+    const diaNacimiento = parseInt(dayStr);
+    const hoy = new Date();
+    
+    let edad = hoy.getFullYear() - anioNacimiento;
+    const m = hoy.getMonth() - mesNacimiento;
+    if (m < 0 || (m === 0 && hoy.getDate() < diaNacimiento)) { edad--; }
+
+    setPmResultado({ dni: d, edad, dia: dayStr, mes: monthStr, anio: anioNacimiento });
+    guardarEnHistorialPM(d, fechaNacFormateada);
+    setPmDni('');
+    setPmFechaNac('');
+  };
+
+  const guardarEnHistorialPM = (d: string, fNac: string) => {
+    const ahora = new Date();
+    const fechaISO = ahora.toISOString().split('T')[0];
+    const dia = String(ahora.getDate()).padStart(2, '0');
+    const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+    const anio = ahora.getFullYear();
+    const hora = String(ahora.getHours()).padStart(2, '0');
+    const min = String(ahora.getMinutes()).padStart(2, '0');
+    const fechaLegible = `${dia}/${mes}/${anio} ${hora}:${min}`;
+
+    const newRecord = { fechaISO, fechaLegible, dni: d, fechaNac: fNac, id: crypto.randomUUID() };
+    const updated = [newRecord, ...pmHistorial];
+    setPmHistorial(updated);
+    localStorage.setItem('historialPlanMujer', JSON.stringify(updated));
+  };
+
+  const descargarReportePM = () => {
+    if (!pmDesde || !pmHasta) {
+        alert("Por favor, seleccioná la fecha de inicio y fin para armar el reporte.");
+        return;
+    }
+    const filtrados = pmHistorial.filter(item => item.fechaISO >= pmDesde && item.fechaISO <= pmHasta);
+    if (filtrados.length === 0) {
+        alert("No se encontraron consultas en ese rango de fechas.");
+        return;
+    }
+
+    let csvContent = "Fecha de Consulta;DNI;Fecha de Nacimiento\n";
+    filtrados.forEach(row => { csvContent += `${row.fechaLegible};${row.dni};${row.fechaNac}\n`; });
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Reporte_PlanMujer_${pmDesde}_al_${pmHasta}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const renderTarjetaPlan = (titulo: string, min: number, max: number) => {
+    if (!pmResultado) return null;
+    const { edad, dia, mes, anio } = pmResultado;
+    const anioActivacion = anio + min;
+    const anioVencimiento = anio + max;
+    const fechaActivacion = `${dia}/${mes}/${anioActivacion}`;
+    const fechaVencimiento = `${dia}/${mes}/${anioVencimiento}`;
+
+    let estadoHtml = null;
+    if (edad >= max) {
+        estadoHtml = <div className="mt-2 w-full bg-red-100 text-red-800 border border-red-200 p-2 rounded text-sm font-bold">NO CORRESPONDE</div>;
+    } else if (edad < min) {
+        estadoHtml = <div className="mt-2 w-full bg-red-100 text-red-800 border border-red-200 p-2 rounded text-sm"><span className="font-bold">Activa el:</span> {fechaActivacion} <br/> <span className="font-bold">Vence el:</span> {fechaVencimiento}</div>;
+    } else {
+        estadoHtml = <div className="mt-2 w-full bg-green-100 text-green-800 border border-green-200 p-2 rounded text-sm font-bold">Vigente hasta el {fechaVencimiento}</div>;
+    }
+
+    return (
+      <div className="bg-slate-50 border border-dosep-border rounded-lg p-4">
+        <div className="font-bold text-slate-700 text-sm">{titulo}</div>
+        {estadoHtml}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen flex bg-dosep-bg font-sans">
-      {/* Sidebar */}
+      {/* ==========================================
+          SIDEBAR
+          ========================================== */}
       <aside className="w-64 bg-dosep-blue text-white flex-shrink-0 flex flex-col hidden lg:flex shadow-2xl z-10">
         <div className="p-6 flex flex-col gap-1 border-b border-white/10 bg-dosep-dark/30">
           <div className="font-black tracking-tighter text-2xl flex items-center gap-2">
@@ -713,22 +658,45 @@ export default function App() {
         </div>
         
         <nav className="flex-1 overflow-y-auto py-6 custom-scrollbar space-y-1">
-          <SidebarItem icon={<LayoutDashboard size={18} />} label="Dashboard" />
+          <SidebarItem 
+            icon={<LayoutDashboard size={18} />} 
+            label="Dashboard" 
+            active={vistaActiva === 'dashboard'} 
+            onClick={() => setVistaActiva('dashboard')} 
+          />
           
           <div className="pt-4">
             <p className="px-6 text-[10px] font-bold text-white/40 uppercase tracking-widest mb-2">Operaciones</p>
-            <SidebarItem icon={<FileSpreadsheet size={18} />} label="Descuento Planilla" active hasChevron />
+            <SidebarItem icon={<FileSpreadsheet size={18} />} label="Descuento Planilla" active={vistaActiva === 'refinanciacion'} hasChevron />
             <div className="bg-dosep-dark/20 py-1">
-              <SidebarSubItem label="Refinanciación" active />
-              <SidebarSubItem label="Consulta Deuda" />
-              <SidebarSubItem label="Lotes Emitidos" />
+              <SidebarSubItem 
+                label="Refinanciación" 
+                active={vistaActiva === 'refinanciacion'} 
+                onClick={() => setVistaActiva('refinanciacion')}
+              />
             </div>
           </div>
 
           <div className="pt-4">
+            <p className="px-6 text-[10px] font-bold text-white/40 uppercase tracking-widest mb-2">Herramientas</p>
+            <SidebarItem 
+                icon={<Percent size={18} />} 
+                label="Cálculo de Ajuste" 
+                active={vistaActiva === 'calculadora'}
+                onClick={() => setVistaActiva('calculadora')}
+            />
+          </div>
+
+          <div className="pt-4">
             <p className="px-6 text-[10px] font-bold text-white/40 uppercase tracking-widest mb-2">Afiliados</p>
-            <SidebarItem icon={<Users size={18} />} label="Padrón" />
-            <SidebarItem icon={<Stethoscope size={18} />} label="Prestaciones" />
+            <SidebarItem 
+                icon={<Heart size={18} />} 
+                label="Plan Mujer" 
+                active={vistaActiva === 'plan_mujer'}
+                onClick={() => setVistaActiva('plan_mujer')}
+            />
+            <SidebarItem icon={<Users size={18} />} label="Padrón" onClick={() => alert("Módulo en construcción")} />
+            <SidebarItem icon={<Stethoscope size={18} />} label="Prestaciones" onClick={() => alert("Módulo en construcción")} />
           </div>
         </nav>
 
@@ -745,15 +713,21 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* ==========================================
+          CONTENIDO PRINCIPAL
+          ========================================== */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
+        
+        {/* HEADER DINÁMICO */}
         <header className="h-16 bg-white border-b border-dosep-border flex items-center justify-between px-8 flex-shrink-0 shadow-sm z-10">
           <div className="flex items-center gap-4">
-            <div className="lg:hidden text-dosep-blue">
-              <ShieldCheck size={24} />
-            </div>
-            <h1 className="text-lg font-bold text-slate-800 tracking-tight">Descuento por Planilla <span className="text-dosep-blue">/</span> <span className="text-slate-400 font-medium">Refinanciación</span></h1>
+            <div className="lg:hidden text-dosep-blue"><ShieldCheck size={24} /></div>
+            <h1 className="text-lg font-bold text-slate-800 tracking-tight">
+              {vistaActiva === 'refinanciacion' && <>Descuento por Planilla <span className="text-dosep-blue">/</span> <span className="text-slate-400 font-medium">Refinanciación</span></>}
+              {vistaActiva === 'calculadora' && <>Herramientas <span className="text-dosep-blue">/</span> <span className="text-slate-400 font-medium">Calculadora de Ajuste</span></>}
+              {vistaActiva === 'plan_mujer' && <>Afiliados <span className="text-dosep-blue">/</span> <span className="text-slate-400 font-medium">Plan Mujer</span></>}
+              {vistaActiva === 'dashboard' && <>Panel General</>}
+            </h1>
           </div>
           
           <div className="flex items-center gap-6">
@@ -761,24 +735,223 @@ export default function App() {
               <Calendar size={16} />
               <span className="text-xs font-medium">{new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
             </div>
-            <div className="h-8 w-px bg-slate-100"></div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setShowHistory(!showHistory)}
-                className={`p-2 rounded-full transition-all ${showHistory ? 'bg-dosep-blue text-white shadow-md' : 'text-slate-400 hover:bg-slate-100 hover:text-dosep-blue'}`}
-                title="Historial de Operaciones"
-              >
-                <History size={20} />
-              </button>
-              <button className="p-2 text-slate-400 hover:bg-slate-100 hover:text-dosep-blue rounded-full transition-all">
-                <Mail size={20} />
-              </button>
-            </div>
+            
+            {vistaActiva === 'refinanciacion' && (
+              <>
+                <div className="h-8 w-px bg-slate-100"></div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setShowHistory(!showHistory)}
+                    className={`p-2 rounded-full transition-all ${showHistory ? 'bg-dosep-blue text-white shadow-md' : 'text-slate-400 hover:bg-slate-100 hover:text-dosep-blue'}`}
+                    title="Historial de Operaciones"
+                  >
+                    <History size={20} />
+                  </button>
+                  <button className="p-2 text-slate-400 hover:bg-slate-100 hover:text-dosep-blue rounded-full transition-all">
+                    <Mail size={20} />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-          <div className="max-w-6xl mx-auto space-y-6">
+          
+          {/* VISTA: DASHBOARD */}
+          {vistaActiva === 'dashboard' && (
+             <div className="max-w-6xl mx-auto flex flex-col items-center justify-center py-20 opacity-50">
+                <ShieldCheck size={64} className="text-dosep-blue mb-4" />
+                <h2 className="text-2xl font-bold text-slate-600">Sistema Integral DOSEP</h2>
+                <p className="text-slate-500">Seleccioná un módulo del menú lateral para comenzar.</p>
+             </div>
+          )}
+
+          {/* VISTA: CALCULADORA DE AJUSTE */}
+          {vistaActiva === 'calculadora' && (
+            <div className="max-w-md mx-auto space-y-6">
+              <div className="bg-white rounded shadow-sm border border-dosep-border p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 bg-dosep-blue/10 rounded-lg text-dosep-blue"><Percent size={24} /></div>
+                  <h2 className="text-xl font-bold text-slate-700">Calculadora de Ajuste</h2>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-bold text-slate-500">Valor Original</label>
+                    <input 
+                      type="number" 
+                      value={calcOrigen}
+                      onChange={(e) => setCalcOrigen(e.target.value)}
+                      className="w-full border border-dosep-border rounded px-4 py-3 text-lg focus:border-dosep-teal outline-none transition-all"
+                      placeholder="Ej: 1500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-bold text-slate-500">Valor Final (Nuevo)</label>
+                    <input 
+                      type="number" 
+                      value={calcDestino}
+                      onChange={(e) => setCalcDestino(e.target.value)}
+                      className="w-full border border-dosep-border rounded px-4 py-3 text-lg focus:border-dosep-teal outline-none transition-all"
+                      placeholder="Ej: 1800"
+                    />
+                  </div>
+                  
+                  <button 
+                    onClick={handleCalcularAjuste}
+                    className="w-full bg-dosep-blue text-white py-3 rounded font-bold hover:bg-dosep-dark transition-colors mt-2 shadow-sm"
+                  >
+                    CALCULAR DIFERENCIA
+                  </button>
+
+                  {calcResultado && (
+                    <div className={`mt-6 p-4 rounded border text-center ${
+                      calcResultado.tipo === 'aumento' ? 'bg-green-50 border-green-200 text-green-700' : 
+                      calcResultado.tipo === 'disminucion' ? 'bg-red-50 border-red-200 text-red-700' : 
+                      'bg-slate-100 border-slate-200 text-slate-700'
+                    }`}>
+                      <p className="text-sm font-bold uppercase tracking-wide opacity-80 mb-1">
+                        {calcResultado.tipo === 'aumento' ? 'Aumento' : calcResultado.tipo === 'disminucion' ? 'Disminución' : 'Sin cambios'}
+                      </p>
+                      <p className="text-3xl font-black">
+                        {calcResultado.porcentaje > 0 ? `${calcResultado.porcentaje.toFixed(2)}%` : '-'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VISTA: PLAN MUJER */}
+          {vistaActiva === 'plan_mujer' && (
+            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-6">
+              
+              <div className="md:col-span-5 space-y-6">
+                <div className="bg-white rounded shadow-sm border border-dosep-border p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-pink-100 text-pink-600 rounded-lg"><Heart size={20} /></div>
+                    <h2 className="text-lg font-bold text-slate-700">Consulta Plan Mujer</h2>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500">DNI de la Paciente</label>
+                      <input 
+                        type="text" 
+                        value={pmDni}
+                        onChange={(e) => setPmDni(e.target.value)}
+                        className="w-full border border-dosep-border rounded px-3 py-2 text-sm focus:border-dosep-teal outline-none transition-all bg-slate-50"
+                        placeholder="Ej: 35123456"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500">Fecha de Nacimiento</label>
+                      <input 
+                        type="text" 
+                        value={pmFechaNac}
+                        onChange={(e) => setPmFechaNac(e.target.value)}
+                        className="w-full border border-dosep-border rounded px-3 py-2 text-sm focus:border-dosep-teal outline-none transition-all bg-slate-50"
+                        placeholder="DD/MM/AAAA"
+                      />
+                    </div>
+                    <button 
+                      onClick={generarInformePlanMujer}
+                      className="w-full bg-dosep-teal text-white py-2.5 rounded text-sm font-bold hover:bg-opacity-90 transition-colors shadow-sm"
+                    >
+                      CONSULTAR COBERTURA
+                    </button>
+                    
+                    <button 
+                      onClick={() => setPmShowHistory(!pmShowHistory)}
+                      className="w-full bg-transparent border border-dosep-border text-slate-500 py-2 rounded text-xs font-bold hover:bg-slate-50 transition-colors"
+                    >
+                      {pmShowHistory ? 'Ocultar Historial' : 'Mostrar Historial Local'}
+                    </button>
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {pmShowHistory && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                      <div className="bg-white rounded shadow-sm border border-dosep-border p-6 mt-4">
+                        <h3 className="font-bold text-slate-700 text-sm mb-4">Historial y Reportes</h3>
+                        
+                        <div className="space-y-3 mb-4 p-3 bg-slate-50 border border-dosep-border rounded">
+                          <p className="text-[10px] font-bold uppercase text-slate-400">Descargar CSV</p>
+                          <div className="flex gap-2">
+                            <input type="date" value={pmDesde} onChange={e=>setPmDesde(e.target.value)} className="w-full text-xs border rounded p-1.5" />
+                            <input type="date" value={pmHasta} onChange={e=>setPmHasta(e.target.value)} className="w-full text-xs border rounded p-1.5" />
+                          </div>
+                          <button onClick={descargarReportePM} className="w-full bg-green-600 text-white text-xs py-1.5 rounded font-bold hover:bg-green-700">
+                            Bajar Reporte
+                          </button>
+                        </div>
+
+                        <input 
+                          type="text" 
+                          placeholder="Buscar por DNI en historial..."
+                          value={pmSearch}
+                          onChange={(e) => setPmSearch(e.target.value)}
+                          className="w-full border border-dosep-border rounded px-3 py-1.5 text-xs mb-3"
+                        />
+                        <div className="max-h-60 overflow-y-auto custom-scrollbar border border-dosep-border rounded">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-50 sticky top-0">
+                              <tr>
+                                <th className="p-2 border-b">DNI</th>
+                                <th className="p-2 border-b">F. Nac</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pmHistorial.filter(item => item.dni.includes(pmSearch)).length === 0 ? (
+                                <tr><td colSpan={2} className="p-4 text-center text-slate-400 italic">Sin registros</td></tr>
+                              ) : (
+                                pmHistorial.filter(item => item.dni.includes(pmSearch)).map(item => (
+                                  <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                    <td className="p-2 font-medium">{item.dni}</td>
+                                    <td className="p-2 text-slate-500">{item.fechaNac}</td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="md:col-span-7">
+                {pmResultado ? (
+                  <div className="bg-white rounded shadow-sm border border-dosep-border p-6 animate-fade-in">
+                    <div className="text-center pb-4 border-b border-dosep-border mb-4">
+                      <p className="text-sm text-slate-500">Paciente DNI: <span className="font-bold text-dosep-blue">{pmResultado.dni}</span></p>
+                      <p className="text-sm text-slate-500">Edad Actual: <span className="font-bold text-dosep-blue">{pmResultado.edad} años</span></p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {renderTarjetaPlan('PMS (Implante) - 14 a 24 años', 14, 24)}
+                      {renderTarjetaPlan('PSR (Anticonceptivo) - 14 a 50 años', 14, 50)}
+                      {renderTarjetaPlan('PCU (POP, Citología) - 20 a 64 años', 20, 64)}
+                      {renderTarjetaPlan('PCM (Mamografía) - 40 a 70 años', 40, 70)}
+                      {renderTarjetaPlan('PMC (2 Consultas) - 20 a 70 años', 20, 70)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded shadow-sm border border-dashed border-dosep-border h-full min-h-[300px] flex flex-col items-center justify-center p-8 text-center">
+                    <Heart size={48} className="text-slate-200 mb-4" />
+                    <p className="text-slate-400 font-medium">Ingresá los datos de la paciente para evaluar la cobertura del Plan Mujer.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* VISTA: REFINANCIACIÓN (TU CÓDIGO GIGANTE ORIGINAL) */}
+          {vistaActiva === 'refinanciacion' && (
+            <div className="max-w-6xl mx-auto space-y-6">
             
             {/* Search/Form Card */}
             <section className="bg-white rounded shadow-sm border border-dosep-border overflow-hidden">
@@ -1164,7 +1337,6 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Impact Summary Card */}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-dosep-blue/5 border border-dosep-blue/20 rounded-xl p-4 flex items-center gap-4">
                               <div className="bg-dosep-blue text-white p-3 rounded-lg shadow-sm">
@@ -1432,22 +1604,20 @@ export default function App() {
                 </AnimatePresence>
               </div>
             </div>
-          </div>
+            </div>
+          )}
         </main>
       </div>
 
+      {/* MODALES Y OVERLAYS (Solo para refinanciacion) */}
       <AnimatePresence>
         {processing && (
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md"
           >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
               className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center max-w-xs w-full border border-dosep-border"
             >
               <div className="relative w-20 h-20 mb-6">
@@ -1463,9 +1633,7 @@ export default function App() {
               </p>
               <div className="mt-6 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                 <motion.div 
-                  initial={{ width: "0%" }}
-                  animate={{ width: "100%" }}
-                  transition={{ duration: 1.5, ease: "easeInOut" }}
+                  initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 1.5, ease: "easeInOut" }}
                   className="h-full bg-dosep-blue"
                 />
               </div>
@@ -1477,21 +1645,16 @@ export default function App() {
       <AnimatePresence>
         {cancellingOrder && (
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
           >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
               className="bg-white rounded-xl shadow-2xl border border-dosep-border w-full max-w-md overflow-hidden"
             >
               <div className="p-6 border-b border-dosep-border bg-red-50">
                 <h3 className="text-lg font-bold text-red-700 flex items-center gap-2">
-                  <AlertCircle size={20} />
-                  Anular Orden
+                  <AlertCircle size={20} /> Anular Orden
                 </h3>
                 <p className="text-xs text-red-600 mt-1">Esta acción es irreversible y se registrará en el historial.</p>
               </div>
@@ -1513,9 +1676,7 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500">Confirmar DNI del Afiliado</label>
                   <input 
-                    type="text" 
-                    value={cancelDni}
-                    onChange={(e) => setCancelDni(e.target.value)}
+                    type="text" value={cancelDni} onChange={(e) => setCancelDni(e.target.value)}
                     className="w-full border border-dosep-border rounded px-3 py-2 text-sm focus:border-red-500 outline-none transition-all"
                     placeholder="Ingrese el DNI para confirmar"
                   />
@@ -1523,17 +1684,13 @@ export default function App() {
               </div>
               <div className="p-6 bg-slate-50 border-t border-dosep-border flex gap-3">
                 <button 
-                  onClick={() => {
-                    setCancellingOrder(null);
-                    setCancelDni('');
-                  }}
+                  onClick={() => { setCancellingOrder(null); setCancelDni(''); }}
                   className="flex-1 px-4 py-2 rounded border border-slate-200 text-slate-600 font-bold text-sm hover:bg-white transition-all"
                 >
                   CANCELAR
                 </button>
                 <button 
-                  onClick={handleCancelOrder}
-                  disabled={!cancelDni}
+                  onClick={handleCancelOrder} disabled={!cancelDni}
                   className="flex-1 px-4 py-2 rounded bg-red-600 text-white font-bold text-sm hover:bg-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   ANULAR ORDEN
@@ -1545,47 +1702,31 @@ export default function App() {
       </AnimatePresence>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
       
+      {/* CHAT ASSISTANT - (Puede recibir la vista activa también si lo adaptas) */}
       <ChatAssistant currentContext={{
-        dni,
-        orderNumber,
-        totalOrder,
-        totalInstallments,
-        paidInstallments,
-        paymentMethod,
-        isSpecialPlan,
-        result,
-        pendingOrdersCount: pendingOrders.length
+        vistaActiva, dni, orderNumber, totalOrder, totalInstallments, paidInstallments,
+        paymentMethod, isSpecialPlan, result, pendingOrdersCount: pendingOrders.length
       }} />
     </div>
   );
 }
 
-// Helper Components
+// ==========================================
+// COMPONENTES AUXILIARES
+// ==========================================
 function Skeleton({ className }: { className?: string; key?: React.Key }) {
-  return (
-    <div className={`animate-pulse bg-slate-200 rounded ${className}`} />
-  );
+  return <div className={`animate-pulse bg-slate-200 rounded ${className}`} />;
 }
 
-function SidebarItem({ icon, label, active = false, hasChevron = false }: { icon: React.ReactNode, label: string, active?: boolean, hasChevron?: boolean }) {
+function SidebarItem({ icon, label, active = false, hasChevron = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, hasChevron?: boolean, onClick?: () => void }) {
   return (
-    <div className={`flex items-center justify-between px-6 py-3 cursor-pointer transition-colors ${active ? 'bg-dosep-dark border-l-4 border-dosep-teal' : 'hover:bg-dosep-dark/50'}`}>
+    <div onClick={onClick} className={`flex items-center justify-between px-6 py-3 cursor-pointer transition-colors ${active ? 'bg-dosep-dark border-l-4 border-dosep-teal' : 'hover:bg-dosep-dark/50'}`}>
       <div className="flex items-center gap-3">
         <span className={active ? 'text-dosep-teal' : 'text-white/70'}>{icon}</span>
         <span className={`text-sm ${active ? 'font-bold' : 'font-medium opacity-80'}`}>{label}</span>
@@ -1595,11 +1736,13 @@ function SidebarItem({ icon, label, active = false, hasChevron = false }: { icon
   );
 }
 
-function SidebarSubItem({ label, active = false, hasChevron = false }: { label: string, active?: boolean, hasChevron?: boolean }) {
+function SidebarSubItem({ label, active = false, hasChevron = false, onClick }: { label: string, active?: boolean, hasChevron?: boolean, onClick?: () => void }) {
   return (
-    <div className={`flex items-center justify-between pl-14 pr-6 py-2.5 cursor-pointer transition-colors ${active ? 'bg-dosep-dark/40 font-bold' : 'hover:bg-dosep-dark/30'}`}>
+    <div onClick={onClick} className={`flex items-center justify-between pl-14 pr-6 py-2.5 cursor-pointer transition-colors ${active ? 'bg-dosep-dark/40 font-bold' : 'hover:bg-dosep-dark/30'}`}>
       <span className={`text-[13px] ${active ? 'text-dosep-teal' : 'text-white/60'}`}>{label}</span>
       {hasChevron && <ChevronRight size={12} className="opacity-40" />}
     </div>
   );
 }
+
+```
