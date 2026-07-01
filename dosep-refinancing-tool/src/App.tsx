@@ -1744,5 +1744,3 @@ function SidebarSubItem({ label, active = false, hasChevron = false, onClick }: 
     </div>
   );
 }
-
-```
