@@ -22,6 +22,7 @@ export interface OrderEntry {
   targetLotTotal?: number;
   targetLotInstallments?: number;
   targetLotPaidInstallments?: number;
+  targetCreditStartAffiliateId?: string;
   newTotalInstallments?: number;
 }
 
