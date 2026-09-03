@@ -62,6 +62,7 @@ export default function App() {
   const [targetLotTotal, setTargetLotTotal] = useState<number | ''>('');
   const [targetLotInstallments, setTargetLotInstallments] = useState<number | ''>('');
   const [targetLotPaidInstallments, setTargetLotPaidInstallments] = useState<number | ''>('');
+  const [targetCreditStartAffiliateId, setTargetCreditStartAffiliateId] = useState('');
   const [newTotalInstallments, setNewTotalInstallments] = useState<number | ''>('');
 
   const [pendingOrders, setPendingOrders] = useState<OrderEntry[]>([]);
@@ -152,7 +153,8 @@ export default function App() {
     setPaidInstallments(''); setPaymentMethod('financiado'); setIsSpecialPlan('no');
     setDppLotNumber(''); setDppLotTotal(''); setStartAffiliateId('181225864');
     setIsFullyPaidLot(false); setTargetCreditLotNumber(''); setTargetLotTotal('');
-    setTargetLotInstallments(''); setTargetLotPaidInstallments(''); setNewTotalInstallments('');
+    setTargetLotInstallments(''); setTargetLotPaidInstallments(''); setTargetCreditStartAffiliateId('');
+    setNewTotalInstallments('');
   };
 
   const addOrderToBatch = () => {
@@ -172,8 +174,12 @@ export default function App() {
       alert('Debe ingresar el número de lote DPP y su total.');
       return;
     }
+    if (paymentMethod === 'financiado' && isFullyPaidLot && !targetCreditStartAffiliateId) {
+      alert('Debe ingresar el ID de Afiliado Inicial para el lote destino.');
+      return;
+    }
 
-    const newOrder: OrderEntry = {
+    const newOrder: any = {
       id: crypto.randomUUID(), dni, orderNumber,
       totalOrder: Number(totalOrder), totalInstallments: Number(totalInstallments),
       paidInstallments: Number(paidInstallments || 0), paymentMethod,
@@ -186,12 +192,13 @@ export default function App() {
       targetLotTotal: (paymentMethod === 'financiado' && isFullyPaidLot) ? Number(targetLotTotal) : undefined,
       targetLotInstallments: (paymentMethod === 'financiado' && isFullyPaidLot) ? Number(targetLotInstallments) : undefined,
       targetLotPaidInstallments: (paymentMethod === 'financiado' && isFullyPaidLot) ? Number(targetLotPaidInstallments) : undefined,
+      targetCreditStartAffiliateId: (paymentMethod === 'financiado' && isFullyPaidLot) ? targetCreditStartAffiliateId : undefined,
       newTotalInstallments: newTotalInstallments !== '' ? Number(newTotalInstallments) : undefined,
     };
 
-    setPendingOrders([...pendingOrders, newOrder]);
+    setPendingOrders([...pendingOrders, newOrder as OrderEntry]);
     setOrderNumber(''); setTotalOrder(''); setIsFullyPaidLot(false);
-    setTargetCreditLotNumber(''); setTargetLotTotal('');
+    setTargetCreditLotNumber(''); setTargetLotTotal(''); setTargetCreditStartAffiliateId('');
     setTargetLotInstallments(''); setTargetLotPaidInstallments(''); setNewTotalInstallments('');
   };
 
@@ -215,7 +222,7 @@ export default function App() {
               total: o.isFullyPaidLot ? (o.targetLotTotal || 0) : (o.dppLotTotal || 0),
               installments: o.isFullyPaidLot ? (o.targetLotInstallments || 0) : o.totalInstallments,
               paid: o.isFullyPaidLot ? (o.targetLotPaidInstallments || 0) : o.paidInstallments,
-              startId: o.startAffiliateId || '181225864',
+              startId: o.isFullyPaidLot ? ((o as any).targetCreditStartAffiliateId || '0') : (o.startAffiliateId || '181225864'),
               newTotalInstallments: o.newTotalInstallments
             }
           };
@@ -248,7 +255,12 @@ export default function App() {
           montoYaPagadoAnuladas += valorCuotaOrdenOriginal * cuotasCobradas;
         });
 
-        group.incomingCredits.forEach((o: any) => incomingCredit += o.totalOrder);
+        // ACÁ ESTÁ EL ARREGLO DEL CÁLCULO DE CRÉDITO
+        group.incomingCredits.forEach((o: any) => {
+          const valorCuotaOrigen = o.totalInstallments > 0 ? o.totalOrder / o.totalInstallments : 0;
+          const montoPagadoAFavor = valorCuotaOrigen * o.paidInstallments;
+          incomingCredit += montoPagadoAFavor;
+        });
 
         const totalReduccion = totalCancelledInLot + incomingCredit;
         const nuevoTotalLote = Math.max(0, lotTotal - totalReduccion);
@@ -296,7 +308,9 @@ export default function App() {
         });
         group.incomingCredits.forEach((o: any) => {
           if (!dniInLot[o.dni]) dniInLot[o.dni] = { orders: [], credits: [] };
-          dniInLot[o.dni].credits.push({ sourceLot: o.dppLotNumber!, amount: o.totalOrder });
+          const valorCuotaOrigen = o.totalInstallments > 0 ? o.totalOrder / o.totalInstallments : 0;
+          const montoPagadoAFavor = valorCuotaOrigen * o.paidInstallments;
+          dniInLot[o.dni].credits.push({ sourceLot: o.dppLotNumber!, amount: montoPagadoAFavor });
         });
 
         Object.entries(dniInLot).forEach(([dni, data]: [string, any]) => {
@@ -317,7 +331,11 @@ export default function App() {
         });
 
         group.ordersToCancel.forEach((o: any) => saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: 'Financiado (DPP)', action: 'Recalculación de cuotas', cancelledAmount: o.totalOrder, lotNumber: lotNum }));
-        group.incomingCredits.forEach((o: any) => saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: 'Financiado (DPP)', action: `Crédito aplicado al lote ${lotNum}`, cancelledAmount: o.totalOrder, lotNumber: o.dppLotNumber }));
+        group.incomingCredits.forEach((o: any) => {
+          const valorCuotaOrigen = o.totalInstallments > 0 ? o.totalOrder / o.totalInstallments : 0;
+          const montoPagadoAFavor = valorCuotaOrigen * o.paidInstallments;
+          saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: 'Financiado (DPP)', action: `Crédito aplicado al lote ${lotNum}`, cancelledAmount: montoPagadoAFavor, lotNumber: o.dppLotNumber });
+        });
       });
 
       otherOrders.forEach(o => {
@@ -450,7 +468,9 @@ export default function App() {
           creditHeader.font = { italic: true, color: { argb: 'FF008000' } };
           worksheet.mergeCells(`A${creditHeader.number}:D${creditHeader.number}`);
           incomingCredits.forEach(c => {
-            const row = worksheet.addRow([`- Desde Lote ${c.dppLotNumber} (Orden ${c.orderNumber}):`, "", "", c.totalOrder]);
+            const valorCuotaOrigen = c.totalInstallments > 0 ? c.totalOrder / c.totalInstallments : 0;
+            const montoPagadoAFavor = valorCuotaOrigen * c.paidInstallments;
+            const row = worksheet.addRow([`- Desde Lote ${c.dppLotNumber} (Orden ${c.orderNumber}):`, "", "", montoPagadoAFavor]);
             row.getCell(4).numFmt = '"$"#,##0.00'; row.getCell(4).font = { bold: true };
           });
         }
@@ -1005,7 +1025,7 @@ export default function App() {
 
               <div className="px-6 pb-6 grid grid-cols-1 md:grid-cols-4 gap-6 border-t border-dosep-border/50 pt-6">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-500">Cuotas Totales</label>
+                  <label className="text-xs font-medium text-slate-500">Cuotas Totales (Orden)</label>
                   <input 
                     type="number" 
                     value={totalInstallments}
@@ -1014,7 +1034,7 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-500">Cuotas Cobradas</label>
+                  <label className="text-xs font-medium text-slate-500">Cuotas Cobradas (Orden)</label>
                   <input 
                     type="number" 
                     value={paidInstallments}
@@ -1110,7 +1130,7 @@ export default function App() {
                           exit={{ opacity: 0, height: 0 }}
                           className="overflow-hidden"
                         >
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-4 bg-white border border-dosep-border rounded mt-2">
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 p-4 bg-white border border-dosep-border rounded mt-2">
                             <div className="space-y-1.5">
                               <label className="text-xs font-medium text-slate-500">Lote Destino</label>
                               <input 
@@ -1147,6 +1167,16 @@ export default function App() {
                                 value={targetLotPaidInstallments}
                                 onChange={(e) => setTargetLotPaidInstallments(e.target.value === '' ? '' : Number(e.target.value))}
                                 className="w-full border border-dosep-border rounded px-3 py-2 text-sm outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-slate-500 text-dosep-blue">ID Afiliado Inicial (Destino)</label>
+                              <input 
+                                type="text" 
+                                value={targetCreditStartAffiliateId}
+                                onChange={(e) => setTargetCreditStartAffiliateId(e.target.value)}
+                                className="w-full border-2 border-dosep-blue/30 rounded px-3 py-2 text-sm outline-none focus:border-dosep-blue"
+                                placeholder="Ej: 18751805"
                               />
                             </div>
                           </div>
@@ -1393,7 +1423,7 @@ export default function App() {
                                 </div>
                                 <div className="flex gap-4">
                                   <div className="text-right">
-                                    <p className="text-[10px] text-slate-400 uppercase font-medium">Reducción</p>
+                                    <p className="text-[10px] text-slate-400 uppercase font-medium">Crédito Aplicado</p>
                                     <p className="text-sm font-bold text-red-600">-${lot.cancelledAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
                                   </div>
                                   <div className="text-right">
@@ -1433,9 +1463,8 @@ export default function App() {
                                       </div>
                                       <div className="bg-white p-3 rounded border border-dosep-border shadow-sm">
                                         <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Crédito por Pagos</p>
-                                        <p className="text-xs text-slate-600">Monto Cobrado: <span className="font-bold text-dosep-teal">${lot.details?.montoYaPagadoAnuladas.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span></p>
-                                        <p className="text-[9px] text-slate-400 font-medium italic">({lot.details?.porcentajePagoOrden.toFixed(1)}% de la orden anulada)</p>
-                                        <p className="text-[9px] text-slate-500 mt-1 leading-tight">Este monto se aplicó como crédito al saldo restante.</p>
+                                        <p className="text-xs text-slate-600">Monto Acreditado: <span className="font-bold text-dosep-teal">${lot.details?.totalCancelado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span></p>
+                                        <p className="text-[9px] text-slate-500 mt-1 leading-tight">Monto equivalente a las cuotas que ya había pagado el afiliado.</p>
                                       </div>
                                       <div className="bg-white p-3 rounded border border-dosep-border shadow-sm">
                                         <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Nueva Cuota Promedio</p>
@@ -1467,29 +1496,32 @@ export default function App() {
                                               <tr>
                                                 <th className="px-4 py-2">Nro Orden</th>
                                                 <th className="px-4 py-2">DNI Afiliado</th>
-                                                <th className="px-4 py-2">ID Inicio</th>
-                                                <th className="px-4 py-2 text-right">Monto Total</th>
+                                                <th className="px-4 py-2 text-right">Crédito Aportado</th>
                                                 <th className="px-4 py-2 text-center">Acciones</th>
                                               </tr>
                                             </thead>
                                             <tbody className="divide-y divide-dosep-border">
-                                              {lot.orders.map((order) => (
-                                                <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
-                                                  <td className="px-4 py-2.5 font-bold text-slate-700">{order.orderNumber}</td>
-                                                  <td className="px-4 py-2.5 text-slate-600">{order.dni}</td>
-                                                  <td className="px-4 py-2.5 text-slate-400 font-mono">{order.startAffiliateId || '-'}</td>
-                                                  <td className="px-4 py-2.5 text-right font-bold text-dosep-blue">${order.totalOrder.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                                  <td className="px-4 py-2.5 text-center">
-                                                    <button 
-                                                      onClick={() => setCancellingOrder({ order, lotNumber: lot.lotNumber })}
-                                                      className="bg-red-50 text-red-500 p-1.5 rounded hover:bg-red-500 hover:text-white transition-colors"
-                                                      title="Anular Orden"
-                                                    >
-                                                      <Trash2 size={12} />
-                                                    </button>
-                                                  </td>
-                                                </tr>
-                                              ))}
+                                              {lot.orders.map((order) => {
+                                                const valorCuotaOrigen = order.totalInstallments > 0 ? order.totalOrder / order.totalInstallments : 0;
+                                                const montoPagadoAFavor = order.isFullyPaidLot ? (valorCuotaOrigen * order.paidInstallments) : order.totalOrder;
+                                                
+                                                return (
+                                                  <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
+                                                    <td className="px-4 py-2.5 font-bold text-slate-700">{order.orderNumber}</td>
+                                                    <td className="px-4 py-2.5 text-slate-600">{order.dni}</td>
+                                                    <td className="px-4 py-2.5 text-right font-bold text-dosep-blue">${montoPagadoAFavor.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                                    <td className="px-4 py-2.5 text-center">
+                                                      <button 
+                                                        onClick={() => setCancellingOrder({ order, lotNumber: lot.lotNumber })}
+                                                        className="bg-red-50 text-red-500 p-1.5 rounded hover:bg-red-500 hover:text-white transition-colors"
+                                                        title="Anular Orden"
+                                                      >
+                                                        <Trash2 size={12} />
+                                                      </button>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
                                             </tbody>
                                           </table>
                                         </div>
