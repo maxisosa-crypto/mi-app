@@ -1,650 +1,453 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Calculator, 
-  History, 
-  Mail, 
-  Trash2, 
-  Download, 
-  ClipboardCheck, 
-  AlertCircle,
-  ChevronRight,
-  FileText,
-  CreditCard,
-  Banknote,
-  RefreshCw,
-  Plus,
-  ListChecks,
-  X,
-  LayoutDashboard,
-  Users,
-  FileSpreadsheet,
-  ShieldCheck,
-  Stethoscope,
-  Wallet,
-  Pill,
-  MapPin,
-  Calendar,
-  UserRound,
-  ChevronDown,
-  Search,
-  User,
-  Percent,
-  Heart
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
-import { Installment, RefinanceResult, HistoryRecord, OrderEntry, LotSummary } from './types';
-import { ChatAssistant } from './components/ChatAssistant';
+import React, { useState } from 'react';
+
+// Interfaz para definir la estructura de cada servicio/prestación
+interface Servicio {
+  id: string;
+  codigo: string;
+  nombre: string;
+  tipo: string;
+  categoria: string;
+  valor: number;
+  coseguro: number;
+}
 
 export default function App() {
-  // ==========================================
-  // NAVEGACIÓN Y VISTAS
-  // ==========================================
-  const [vistaActiva, setVistaActiva] = useState('refinanciacion');
+  // ---------------------------------------------------------------------------
+  // ESTADOS - CALCULADORA DE AJUSTE
+  // ---------------------------------------------------------------------------
+  const [calcValorOriginal, setCalcValorOriginal] = useState<string>('82300');
+  const [calcValorFinal, setCalcValorFinal] = useState<string>('75000');
+  const [resultadoAjuste, setResultadoAjuste] = useState<{
+    tipo: 'DISMINUCIÓN' | 'AUMENTO' | 'SIN CAMBIO';
+    porcentaje: number;
+    porcentajeStr: string;
+  } | null>({
+    tipo: 'DISMINUCIÓN',
+    porcentaje: 8.8699878,
+    porcentajeStr: '8.86999',
+  });
 
-  // ==========================================
-  // ESTADOS: REFINANCIACIÓN (DOSEP)
-  // ==========================================
-  const [dni, setDni] = useState('');
-  const [orderNumber, setOrderNumber] = useState('');
-  const [totalOrder, setTotalOrder] = useState('');
-  const [totalInstallments, setTotalInstallments] = useState('');
-  const [paidInstallments, setPaidInstallments] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('financiado');
-  const [isSpecialPlan, setIsSpecialPlan] = useState('no');
-  const [dppLotNumber, setDppLotNumber] = useState('');
-  const [dppLotTotal, setDppLotTotal] = useState('');
-  const [startAffiliateId, setStartAffiliateId] = useState('181225864');
-  const [isFullyPaidLot, setIsFullyPaidLot] = useState(false);
-  const [targetCreditLotNumber, setTargetCreditLotNumber] = useState('');
-  const [targetLotTotal, setTargetLotTotal] = useState('');
-  const [targetLotInstallments, setTargetLotInstallments] = useState('');
-  const [targetLotPaidInstallments, setTargetLotPaidInstallments] = useState('');
-  const [targetCreditStartAffiliateId, setTargetCreditStartAffiliateId] = useState('');
-  const [newTotalInstallments, setNewTotalInstallments] = useState('');
+  // ---------------------------------------------------------------------------
+  // ESTADOS - MÓDULO COSEGURO
+  // ---------------------------------------------------------------------------
+  const [tipoActualizacion, setTipoActualizacion] = useState<'Negativo' | 'Positivo'>('Negativo');
+  // Se inicializa con 5 decimales de precisión
+  const [porcentajeActualizacion, setPorcentajeActualizacion] = useState<string>('8.86999');
 
-  const [pendingOrders, setPendingOrders] = useState([]);
-  const [result, setResult] = useState(null);
-  const [processing, setProcessing] = useState(false);
-  const [generatedMails, setGeneratedMails] = useState<{lot: string, content: string}[]>([]);
-  const [history, setHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [expandedLot, setExpandedLot] = useState(null);
-  const [cancellingOrder, setCancellingOrder] = useState<{order: OrderEntry, lotNumber?: string} | null>(null);
-  const [cancelDni, setCancelDni] = useState('');
+  // Lista de servicios inicial (incluye el ejemplo de la imagen)
+  const [servicios, setServicios] = useState<Servicio[]>([
+    {
+      id: '1',
+      codigo: '32.01-SC',
+      nombre: '(N1 1ayu) REDUCCION MANUAL DE PARAFIMOSIS.',
+      tipo: 'Prestaciones',
+      categoria: 'Cirugía General',
+      valor: 273936.6,
+      coseguro: 75000,
+    },
+  ]);
 
-  // ==========================================
-  // ESTADOS: CALCULADORA DE AJUSTE
-  // ==========================================
-  const [calcOrigen, setCalcOrigen] = useState('');
-  const [calcDestino, setCalcDestino] = useState('');
-  const [calcResultado, setCalcResultado] = useState<{porcentaje: number, tipo: string} | null>(null);
+  // Estado para el formulario de nuevo servicio
+  const [nuevoServicio, setNuevoServicio] = useState({
+    codigo: '',
+    nombre: '',
+    tipo: 'Prestaciones',
+    categoria: 'Cirugía General',
+    valor: '',
+    coseguro: '',
+  });
+  const [mostrarFormNuevo, setMostrarFormNuevo] = useState(false);
 
-  // ==========================================
-  // ESTADOS: PLAN MUJER
-  // ==========================================
-  const [pmDni, setPmDni] = useState('');
-  const [pmFechaNac, setPmFechaNac] = useState('');
-  const [pmResultado, setPmResultado] = useState<{dni: string, edad: number, dia: string, mes: string, anio: number} | null>(null);
-  const [pmHistorial, setPmHistorial] = useState([]);
-  const [pmShowHistory, setPmShowHistory] = useState(false);
-  const [pmSearch, setPmSearch] = useState('');
-  const [pmDesde, setPmDesde] = useState('');
-  const [pmHasta, setPmHasta] = useState('');
+  // ---------------------------------------------------------------------------
+  // FUNCIONES DE CÁLCULO
+  // ---------------------------------------------------------------------------
 
-  // Cargar historiales al iniciar
-  useEffect(() => {
-    const savedHistory = localStorage.getItem('dosep_history');
-    if (savedHistory) setHistory(JSON.parse(savedHistory));
+  /**
+   * Calcula la diferencia porcentual con 5 decimales de precisión.
+   */
+  const handleCalcularDiferencia = () => {
+    const orig = parseFloat(calcValorOriginal.replace(',', '.'));
+    const fin = parseFloat(calcValorFinal.replace(',', '.'));
 
-    const savedPmHistory = localStorage.getItem('historialPlanMujer');
-    if (savedPmHistory) setPmHistorial(JSON.parse(savedPmHistory));
-  }, []);
-
-  // ==========================================
-  // FUNCIONES: REFINANCIACIÓN
-  // ==========================================
-  const saveToHistory = (record: Omit) => {
-    const newRecord: HistoryRecord = {
-      ...record,
-      id: crypto.randomUUID(),
-      timestamp: new Date().toLocaleString('es-AR'),
-    };
-    const updatedHistory = [newRecord, ...history];
-    setHistory(updatedHistory);
-    localStorage.setItem('dosep_history', JSON.stringify(updatedHistory));
-  };
-
-  const clearHistory = () => {
-    if (window.confirm('¿Está seguro de que desea borrar todo el historial?')) {
-      setHistory([]);
-      localStorage.removeItem('dosep_history');
-    }
-  };
-
-  const deleteHistoryRecord = (id: string) => {
-    const updatedHistory = history.filter(r => r.id !== id);
-    setHistory(updatedHistory);
-    localStorage.setItem('dosep_history', JSON.stringify(updatedHistory));
-  };
-
-  const exportHistory = () => {
-    if (history.length === 0) return;
-    const csvContent = [
-      ['Fecha', 'DNI', 'Orden', 'Medio', 'Acción', 'Monto Anulado', 'Lote'],
-      ...history.map(r => [r.timestamp, r.dni, r.orderNumber, r.paymentMethod, r.action, r.cancelledAmount, r.lotNumber || ''])
-    ].map(e => e.join(',')).join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `historial_dosep_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const resetForm = () => {
-    setDni(''); setOrderNumber(''); setTotalOrder(''); setTotalInstallments('');
-    setPaidInstallments(''); setPaymentMethod('financiado'); setIsSpecialPlan('no');
-    setDppLotNumber(''); setDppLotTotal(''); setStartAffiliateId('181225864');
-    setIsFullyPaidLot(false); setTargetCreditLotNumber(''); setTargetLotTotal('');
-    setTargetLotInstallments(''); setTargetLotPaidInstallments(''); setTargetCreditStartAffiliateId('');
-    setNewTotalInstallments('');
-  };
-
-  const addOrderToBatch = () => {
-    if (!dni || !orderNumber || totalOrder === '' || totalInstallments === '') {
-      alert('Por favor complete los campos obligatorios (DNI, Orden, Total, Cuotas).');
-      return;
-    }
-    if (Number(totalOrder) <= 0 || Number(totalInstallments) <= 0) {
-      alert('El total de la orden y las cuotas deben ser mayores a cero.');
-      return;
-    }
-    if (Number(paidInstallments) > Number(totalInstallments)) {
-      alert('Las cuotas cobradas no pueden ser mayores a las cuotas totales.');
-      return;
-    }
-    if (paymentMethod === 'financiado' && (!dppLotNumber || dppLotTotal === '')) {
-      alert('Debe ingresar el número de lote DPP y su total.');
-      return;
-    }
-    if (paymentMethod === 'financiado' && isFullyPaidLot && !targetCreditStartAffiliateId) {
-      alert('Debe ingresar el ID de Afiliado Inicial para el lote destino.');
+    if (isNaN(orig) || isNaN(fin) || orig <= 0) {
+      alert('Por favor ingrese valores numéricos válidos mayores a cero.');
       return;
     }
 
-    const newOrder: any = {
-      id: crypto.randomUUID(), dni, orderNumber,
-      totalOrder: Number(totalOrder), totalInstallments: Number(totalInstallments),
-      paidInstallments: Number(paidInstallments || 0), paymentMethod,
-      isSpecialPlan: isSpecialPlan === 'si',
-      dppLotNumber: paymentMethod === 'financiado' ? dppLotNumber : undefined,
-      dppLotTotal: paymentMethod === 'financiado' ? Number(dppLotTotal) : undefined,
-      startAffiliateId: paymentMethod === 'financiado' ? startAffiliateId : undefined,
-      isFullyPaidLot: paymentMethod === 'financiado' ? isFullyPaidLot : false,
-      targetCreditLotNumber: (paymentMethod === 'financiado' && isFullyPaidLot) ? targetCreditLotNumber : undefined,
-      targetLotTotal: (paymentMethod === 'financiado' && isFullyPaidLot) ? Number(targetLotTotal) : undefined,
-      targetLotInstallments: (paymentMethod === 'financiado' && isFullyPaidLot) ? Number(targetLotInstallments) : undefined,
-      targetLotPaidInstallments: (paymentMethod === 'financiado' && isFullyPaidLot) ? Number(targetLotPaidInstallments) : undefined,
-      targetCreditStartAffiliateId: (paymentMethod === 'financiado' && isFullyPaidLot) ? targetCreditStartAffiliateId : undefined,
-      newTotalInstallments: newTotalInstallments !== '' ? Number(newTotalInstallments) : undefined,
-    };
+    const diferencia = fin - orig;
+    const pct = (Math.abs(diferencia) / orig) * 100;
+    
+    // Guardamos con 5 decimales exactos para evitar pérdida de precisión
+    const pctFormateado = pct.toFixed(5);
 
-    setPendingOrders([...pendingOrders, newOrder as OrderEntry]);
-    setOrderNumber(''); setTotalOrder(''); setIsFullyPaidLot(false);
-    setTargetCreditLotNumber(''); setTargetLotTotal(''); setTargetCreditStartAffiliateId('');
-    setTargetLotInstallments(''); setTargetLotPaidInstallments(''); setNewTotalInstallments('');
-  };
+    let tipo: 'DISMINUCIÓN' | 'AUMENTO' | 'SIN CAMBIO' = 'SIN CAMBIO';
+    if (diferencia < 0) tipo = 'DISMINUCIÓN';
+    if (diferencia > 0) tipo = 'AUMENTO';
 
-  const removeOrderFromBatch = (id: string) => setPendingOrders(pendingOrders.filter(o => o.id !== id));
-
-  const handleProcessBatch = () => {
-    if (pendingOrders.length === 0) { alert('No hay órdenes en la lista para procesar.'); return; }
-    setProcessing(true);
-
-    setTimeout(() => {
-      const dppOrders = pendingOrders.filter(o => o.paymentMethod === 'financiado' && !o.isSpecialPlan);
-      const otherOrders = pendingOrders.filter(o => o.paymentMethod !== 'financiado' || o.isSpecialPlan);
-      const adjustedLotGroups: any = {};
-
-      dppOrders.forEach(o => {
-        const targetLotNum = o.isFullyPaidLot ? o.targetCreditLotNumber! : o.dppLotNumber!;
-        if (!adjustedLotGroups[targetLotNum]) {
-          adjustedLotGroups[targetLotNum] = { 
-            ordersToCancel: [], incomingCredits: [],
-            lotInfo: { 
-              total: o.isFullyPaidLot ? (o.targetLotTotal || 0) : (o.dppLotTotal || 0),
-              installments: o.isFullyPaidLot ? (o.targetLotInstallments || 0) : o.totalInstallments,
-              paid: o.isFullyPaidLot ? (o.targetLotPaidInstallments || 0) : o.paidInstallments,
-              startId: o.isFullyPaidLot ? ((o as any).targetCreditStartAffiliateId || '0') : (o.startAffiliateId || '181225864'),
-              newTotalInstallments: o.newTotalInstallments
-            }
-          };
-        } else if (o.newTotalInstallments) {
-          adjustedLotGroups[targetLotNum].lotInfo.newTotalInstallments = Math.max(
-            adjustedLotGroups[targetLotNum].lotInfo.newTotalInstallments || 0,
-            o.newTotalInstallments
-          );
-        }
-
-        if (o.isFullyPaidLot) adjustedLotGroups[targetLotNum].incomingCredits.push(o);
-        else adjustedLotGroups[targetLotNum].ordersToCancel.push(o);
-      });
-
-      const lotSummaries: LotSummary[] = [];
-      const mailLines: string[] = [];
-
-      Object.entries(adjustedLotGroups).forEach(([lotNum, group]: [string, any]) => {
-        const lotTotal = group.lotInfo.total;
-        const originalTotalCuotas = group.lotInfo.installments || 1;
-        const totalCuotas = group.lotInfo.newTotalInstallments || originalTotalCuotas;
-        const cuotasCobradas = group.lotInfo.paid;
-        const startId = group.lotInfo.startId || '0';
-
-        let totalCancelledInLot = 0; let incomingCredit = 0; let montoYaPagadoAnuladas = 0;
-
-        group.ordersToCancel.forEach((o: any) => {
-          totalCancelledInLot += o.totalOrder;
-          const valorCuotaOrdenOriginal = originalTotalCuotas > 0 ? o.totalOrder / originalTotalCuotas : 0;
-          montoYaPagadoAnuladas += valorCuotaOrdenOriginal * cuotasCobradas;
-        });
-
-        group.incomingCredits.forEach((o: any) => {
-          const valorCuotaOrigen = o.totalInstallments > 0 ? o.totalOrder / o.totalInstallments : 0;
-          const montoPagadoAFavor = valorCuotaOrigen * o.paidInstallments;
-          incomingCredit += montoPagadoAFavor;
-        });
-
-        const totalReduccion = totalCancelledInLot + incomingCredit;
-        const nuevoTotalLote = Math.max(0, lotTotal - totalReduccion);
-        const valorCuotaOriginal = originalTotalCuotas > 0 ? lotTotal / originalTotalCuotas : 0;
-        const totalYaCobrado = cuotasCobradas * valorCuotaOriginal;
-        const saldoRemanente = Math.max(0, nuevoTotalLote - totalYaCobrado);
-        const cuotasRestantes = Math.max(0, totalCuotas - cuotasCobradas);
-        
-        let nuevoValorCuota = 0;
-        if (cuotasRestantes > 0) nuevoValorCuota = Math.round((saldoRemanente / cuotasRestantes) * 100) / 100;
-
-        const installments: Installment[] = [];
-        let currentId = parseInt(startId) || 0;
-        let currentPendingSum = 0;
-        let pendingCount = 0;
-
-        for (let i = 1; i <= totalCuotas; i++) {
-          let amount = i <= cuotasCobradas ? valorCuotaOriginal : nuevoValorCuota;
-          if (i > cuotasCobradas) {
-            pendingCount++;
-            if (pendingCount === cuotasRestantes) amount = Math.max(0, saldoRemanente - currentPendingSum);
-            currentPendingSum += amount;
-          }
-          installments.push({
-            number: i, status: i <= cuotasCobradas ? 'COBRADA' : 'PENDIENTE',
-            amount, affiliateId: (currentId + (i - 1)).toString()
-          });
-        }
-
-        lotSummaries.push({
-          lotNumber: lotNum, originalTotal: lotTotal, adjustedTotal: nuevoTotalLote,
-          cancelledAmount: totalReduccion, installmentAmount: nuevoValorCuota,
-          installments, orders: [...group.ordersToCancel, ...group.incomingCredits],
-          details: {
-            cuotasCobradas, cuotasRestantes, totalCancelado: totalReduccion,
-            nuevoValorCuota, saldoRemanente, porcentajeCancelado: (totalReduccion / lotTotal) * 100,
-            montoYaPagadoAnuladas, porcentajePagoOrden: totalCancelledInLot > 0 ? (montoYaPagadoAnuladas / totalCancelledInLot) * 100 : 0
-          }
-        });
-
-        const dniInLot: any = {};
-        group.ordersToCancel.forEach((o: any) => {
-          if (!dniInLot[o.dni]) dniInLot[o.dni] = { orders: [], credits: [] };
-          dniInLot[o.dni].orders.push(o.orderNumber);
-        });
-        group.incomingCredits.forEach((o: any) => {
-          if (!dniInLot[o.dni]) dniInLot[o.dni] = { orders: [], credits: [] };
-          const valorCuotaOrigen = o.totalInstallments > 0 ? o.totalOrder / o.totalInstallments : 0;
-          const montoPagadoAFavor = valorCuotaOrigen * o.paidInstallments;
-          dniInLot[o.dni].credits.push({ sourceLot: o.dppLotNumber!, amount: montoPagadoAFavor });
-        });
-
-        Object.entries(dniInLot).forEach(([dni, data]: [string, any]) => {
-          const firstPendingInst = installments.find(inst => inst.status === 'PENDIENTE');
-          const formattedTotal = nuevoTotalLote.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
-          const formattedCuota = nuevoValorCuota.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
-          
-          let line = `DNI: \({dni}: modificar lote dpp\){lotNum} al valor de ${formattedTotal}`;
-          if (firstPendingInst) line += ` y modificar nro cta afiliado \({firstPendingInst.affiliateId} al valor de\){formattedCuota}`;
-          
-          const reasons: string[] = [];
-          if (data.orders.length > 0) reasons.push(`anulacion de orden ${data.orders.join(' y ')}`);
-          if (data.credits.length > 0) {
-            data.credits.forEach((c: any) => reasons.push(`credito por orden anulada en lote \({c.sourceLot} (ya cobrado) por valor de\){c.amount.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}`));
-          }
-          line += ` por ${reasons.join(' y ')}.`;
-          mailLines.push(line);
-        });
-
-        group.ordersToCancel.forEach((o: any) => saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: 'Financiado (DPP)', action: 'Recalculación de cuotas', cancelledAmount: o.totalOrder, lotNumber: lotNum }));
-        group.incomingCredits.forEach((o: any) => {
-          const valorCuotaOrigen = o.totalInstallments > 0 ? o.totalOrder / o.totalInstallments : 0;
-          const montoPagadoAFavor = valorCuotaOrigen * o.paidInstallments;
-          saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: 'Financiado (DPP)', action: `Crédito aplicado al lote ${lotNum}`, cancelledAmount: montoPagadoAFavor, lotNumber: o.dppLotNumber });
-        });
-      });
-
-      otherOrders.forEach(o => {
-        let action = ''; let cancelledAmount = o.totalOrder; let method = o.paymentMethod;
-        if (o.isSpecialPlan) { action = 'Anulación sin impacto económico'; cancelledAmount = 0; method = 'Planes Especiales'; }
-        else if (o.paymentMethod === 'caja') { action = 'Generación de crédito'; }
-        else { action = 'Devolución de crédito'; }
-        saveToHistory({ dni: o.dni, orderNumber: o.orderNumber, paymentMethod: method, action, cancelledAmount });
-      });
-
-      const consolidatedMail = `Estimados:\n\nSe solicita modificación de los siguientes nro de cuenta afiliado y que los cambios se apliquen en la tabla CNT_historicodescuentosporplanilla en el caso de que ya se hayan generado:\n\n${mailLines.join('\n')}\n\nSe adjunta el excel con el desglose por afiliado.`;
-
-      setResult({ lots: lotSummaries, otherOrders });
-      if (lotSummaries.length > 0) setExpandedLot(lotSummaries[0].lotNumber);
-      setGeneratedMails([{ lot: 'Consolidado', content: consolidatedMail }]);
-      setPendingOrders([]); setProcessing(false);
-      alert('Lote de órdenes procesado correctamente.');
-    }, 1500);
-  };
-
-  const handleCancelOrder = () => {
-    if (!cancellingOrder) return;
-    if (cancelDni !== cancellingOrder.order.dni) { alert('El DNI ingresado no coincide con el de la orden.'); return; }
-    if (!window.confirm(`¿Está seguro de que desea ANULAR la orden ${cancellingOrder.order.orderNumber}? Esta acción se registrará en el historial.`)) return;
-
-    saveToHistory({
-      dni: cancellingOrder.order.dni, orderNumber: cancellingOrder.order.orderNumber,
-      paymentMethod: cancellingOrder.order.paymentMethod, action: 'ANULACIÓN MANUAL POST-PROCESO',
-      cancelledAmount: cancellingOrder.order.totalOrder, lotNumber: cancellingOrder.lotNumber
+    setResultadoAjuste({
+      tipo,
+      porcentaje: pct,
+      porcentajeStr: pctFormateado,
     });
+  };
 
-    if (result) {
-      const newResult = { ...result };
-      if (cancellingOrder.lotNumber) {
-        newResult.lots = newResult.lots.map(lot => {
-          if (lot.lotNumber === cancellingOrder.lotNumber) {
-            const updatedOrders = lot.orders.filter(o => o.id !== cancellingOrder.order.id);
-            const removedAmount = cancellingOrder.order.totalOrder;
-            const newCancelledAmount = Math.max(0, lot.cancelledAmount - removedAmount);
-            const newAdjustedTotal = lot.originalTotal - newCancelledAmount;
-            
-            let newDetails = lot.details;
-            let updatedInstallments = [...lot.installments];
+  /**
+   * Copia el porcentaje calculado (con 5 decimales) directamente a la casilla de Coseguro.
+   */
+  const handleTransferirPorcentaje = () => {
+    if (!resultadoAjuste) return;
+    setPorcentajeActualizacion(resultadoAjuste.porcentajeStr);
+    setTipoActualizacion(resultadoAjuste.tipo === 'DISMINUCIÓN' ? 'Negativo' : 'Positivo');
+  };
 
-            if (newDetails) {
-              const cuotasCobradas = newDetails.cuotasCobradas;
-              const cuotasRestantes = newDetails.cuotasRestantes;
-              const totalCuotas = cuotasCobradas + cuotasRestantes;
-              const valorCuotaOriginal = lot.originalTotal / totalCuotas;
-              const totalYaCobrado = cuotasCobradas * valorCuotaOriginal;
-              const saldoRemanente = Math.max(0, newAdjustedTotal - totalYaCobrado);
-              const nuevoValorCuota = cuotasRestantes > 0 ? Math.round((saldoRemanente / cuotasRestantes) * 100) / 100 : 0;
+  /**
+   * Aplica el porcentaje de actualización a todos los coseguros de la tabla.
+   */
+  const handleAplicarCambios = () => {
+    const pct = parseFloat(porcentajeActualizacion.replace(',', '.'));
+    if (isNaN(pct)) {
+      alert('Ingrese un porcentaje válido.');
+      return;
+    }
 
-              newDetails = { ...newDetails, totalCancelado: newCancelledAmount, nuevoValorCuota, saldoRemanente, porcentajeCancelado: (newCancelledAmount / lot.originalTotal) * 100 };
-              
-              let currentPendingSum = 0;
-              updatedInstallments = updatedInstallments.map(inst => {
-                if (inst.status === 'PENDIENTE') {
-                  let amount = nuevoValorCuota;
-                  if (inst.number === totalCuotas) amount = Math.max(0, saldoRemanente - currentPendingSum);
-                  currentPendingSum += amount;
-                  return { ...inst, amount };
-                }
-                return inst;
-              });
-            }
-            return { ...lot, orders: updatedOrders, cancelledAmount: newCancelledAmount, adjustedTotal: newAdjustedTotal, details: newDetails, installments: updatedInstallments };
-          }
-          return lot;
-        });
+    const serviciosActualizados = servicios.map((item) => {
+      let nuevoCoseguro = item.coseguro;
+      if (tipoActualizacion === 'Negativo') {
+        nuevoCoseguro = item.valor * (1 - pct / 100);
       } else {
-        newResult.otherOrders = newResult.otherOrders.filter(o => o.id !== cancellingOrder.order.id);
+        nuevoCoseguro = item.valor * (1 + pct / 100);
       }
-      setResult(newResult);
-    }
-    setCancellingOrder(null); setCancelDni('');
-    alert('Orden anulada exitosamente. El historial ha sido actualizado.');
-  };
 
-  const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text); alert('Copiado al portapapeles'); };
+      // Redondeo matemático exacto a 2 decimales para eliminar residuos de coma flotante (.9999 o .0001)
+      const coseguroRedondeado = Math.round((nuevoCoseguro + Number.EPSILON) * 100) / 100;
 
-  const exportRefinanceExcel = async () => {
-    if (!result) return;
-    const workbook = new ExcelJS.Workbook();
-    const dniGroups: { [dni: string]: { lots: LotSummary[], others: OrderEntry[] } } = {};
-
-    result.lots.forEach(lot => {
-      lot.orders.forEach(order => {
-        if (!dniGroups[order.dni]) dniGroups[order.dni] = { lots: [], others: [] };
-        if (!dniGroups[order.dni].lots.find(l => l.lotNumber === lot.lotNumber)) dniGroups[order.dni].lots.push(lot);
-      });
+      return {
+        ...item,
+        coseguro: coseguroRedondeado,
+      };
     });
 
-    result.otherOrders.forEach(order => {
-      if (!dniGroups[order.dni]) dniGroups[order.dni] = { lots: [], others: [] };
-      dniGroups[order.dni].others.push(order);
+    setServicios(serviciosActualizados);
+  };
+
+  // ---------------------------------------------------------------------------
+  // GESTIÓN DE SERVICIOS
+  // ---------------------------------------------------------------------------
+  const handleEliminarServicio = (id: string) => {
+    setServicios(servicios.filter((s) => s.id !== id));
+  };
+
+  const handleAgregarServicio = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoServicio.codigo || !nuevoServicio.nombre || !nuevoServicio.valor) {
+      alert('Complete los campos obligatorios.');
+      return;
+    }
+
+    const val = parseFloat(nuevoServicio.valor);
+    const cos = nuevoServicio.coseguro ? parseFloat(nuevoServicio.coseguro) : val;
+
+    const itemNuevo: Servicio = {
+      id: Date.now().toString(),
+      codigo: nuevoServicio.codigo,
+      nombre: nuevoServicio.nombre,
+      tipo: nuevoServicio.tipo,
+      categoria: nuevoServicio.categoria,
+      valor: val,
+      coseguro: cos,
+    };
+
+    setServicios([...servicios, itemNuevo]);
+    setNuevoServicio({
+      codigo: '',
+      nombre: '',
+      tipo: 'Prestaciones',
+      categoria: 'Cirugía General',
+      valor: '',
+      coseguro: '',
     });
-
-    for (const [dni, data] of Object.entries(dniGroups)) {
-      const sheetName = dni.substring(0, 31);
-      const worksheet = workbook.addWorksheet(sheetName);
-
-      worksheet.columns = [{ width: 15 }, { width: 30 }, { width: 20 }, { width: 20 }];
-      const titleRow = worksheet.addRow(["REFINANCIACIÓN DOSEP - AFILIADO: " + dni]);
-      titleRow.font = { bold: true, size: 14, color: { argb: 'FF000000' } };
-      worksheet.mergeCells(`A\({titleRow.number}:D\){titleRow.number}`);
-
-      const refRow = worksheet.addRow(["Referencia: CNT_historicodescuentosporplanilla"]);
-      refRow.font = { italic: true, size: 11, color: { argb: 'FF666666' } };
-      worksheet.mergeCells(`A\({refRow.number}:D\){refRow.number}`);
-      worksheet.addRow([]);
-
-      data.lots.forEach(lot => {
-        const lotHeader = worksheet.addRow(["LOTE DPP Nº: " + lot.lotNumber]);
-        lotHeader.font = { bold: true, size: 12 };
-        worksheet.mergeCells(`A\({lotHeader.number}:D\){lotHeader.number}`);
-
-        const orderHeader = worksheet.addRow(["Órdenes del afiliado en este lote:"]);
-        orderHeader.font = { italic: true };
-        worksheet.mergeCells(`A\({orderHeader.number}:D\){orderHeader.number}`);
-
-        lot.orders.filter(o => o.dni === dni && !o.isFullyPaidLot).forEach(o => {
-          const row = worksheet.addRow(["- Orden: " + o.orderNumber + " | Total Orden:", "", "", o.totalOrder]);
-          row.getCell(4).numFmt = '"$"#,##0.00'; row.getCell(4).font = { bold: true };
-        });
-
-        const incomingCredits = result.lots.flatMap(l => l.orders).filter(o => o.dni === dni && o.isFullyPaidLot && o.targetCreditLotNumber === lot.lotNumber);
-        if (incomingCredits.length > 0) {
-          const creditHeader = worksheet.addRow(["Créditos aplicados desde otros lotes (ya cobrados):"]);
-          creditHeader.font = { italic: true, color: { argb: 'FF008000' } };
-          worksheet.mergeCells(`A\({creditHeader.number}:D\){creditHeader.number}`);
-          incomingCredits.forEach(c => {
-            const valorCuotaOrigen = c.totalInstallments > 0 ? c.totalOrder / c.totalInstallments : 0;
-            const montoPagadoAFavor = valorCuotaOrigen * c.paidInstallments;
-            const row = worksheet.addRow([`- Desde Lote \({c.dppLotNumber} (Orden\){c.orderNumber}):`, "", "", montoPagadoAFavor]);
-            row.getCell(4).numFmt = '"$"#,##0.00'; row.getCell(4).font = { bold: true };
-          });
-        }
-
-        worksheet.addRow([]);
-        const breakdownTitle = worksheet.addRow(["DESGLOSE DE CUOTAS DEL LOTE (Recalculado)"]);
-        breakdownTitle.font = { bold: true };
-        worksheet.mergeCells(`A\({breakdownTitle.number}:D\){breakdownTitle.number}`);
-
-        const headerRow = worksheet.addRow(["Cuota", "ID Afiliado (Nro Cta)", "Estado", "Monto"]);
-        headerRow.eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FF000000' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
-          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-          cell.alignment = { horizontal: 'center' };
-        });
-
-        lot.installments.forEach(inst => {
-          const row = worksheet.addRow([inst.number, inst.affiliateId, inst.status, inst.amount]);
-          row.getCell(4).numFmt = '"$"#,##0.00';
-          row.eachCell((cell, colNumber) => {
-            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-            if (colNumber === 1 || colNumber === 3) cell.alignment = { horizontal: 'center' };
-            if (colNumber === 4) cell.alignment = { horizontal: 'right' };
-            if (inst.status === 'COBRADA') cell.font = { color: { argb: 'FF666666' } };
-          });
-        });
-
-        const totalRow = worksheet.addRow(["--------------------------------------------------", "", "", lot.adjustedTotal]);
-        totalRow.getCell(4).numFmt = '"$"#,##0.00'; totalRow.getCell(4).font = { bold: true };
-        totalRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
-        totalRow.getCell(4).border = { top: { style: 'medium' }, left: { style: 'medium' }, bottom: { style: 'medium' }, right: { style: 'medium' } };
-        worksheet.addRow([]); worksheet.addRow([]);
-      });
-
-      if (data.others.length > 0) {
-        const otherTitle = worksheet.addRow(["OTRAS ÓRDENES (Caja / Crédito / Planes Especiales)"]);
-        otherTitle.font = { bold: true };
-        worksheet.mergeCells(`A\({otherTitle.number}:D\){otherTitle.number}`);
-        const otherHeader = worksheet.addRow(["Orden", "Medio", "Acción", "Monto"]);
-        otherHeader.eachCell((cell) => {
-          cell.font = { bold: true }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
-          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-        });
-        data.others.forEach(o => {
-          const row = worksheet.addRow([o.orderNumber, o.paymentMethod, o.isSpecialPlan ? 'Planes Especiales' : 'Anulación', o.totalOrder]);
-          row.getCell(4).numFmt = '"$"#,##0.00';
-          row.eachCell((cell) => { cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }; });
-        });
-      }
-    }
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `Refinanciacion_DOSEP_${new Date().toISOString().split('T')[0]}.xlsx`);
+    setMostrarFormNuevo(false);
   };
 
-  // ==========================================
-  // FUNCIONES: CALCULADORA DE AJUSTE
-  // ==========================================
-  const handleCalcularAjuste = () => {
-    const o = parseFloat(calcOrigen);
-    const d = parseFloat(calcDestino);
-    if(isNaN(o) || isNaN(d) || o === 0) {
-        alert("Ingrese valores válidos y distintos de cero en el origen.");
-        return;
-    }
-    const porcentaje = ((d - o) / o) * 100;
-    let tipo = "nada";
-    if (porcentaje > 0) tipo = "aumento";
-    if (porcentaje < 0) tipo = "disminucion";
-    
-    setCalcResultado({ porcentaje: Math.abs(porcentaje), tipo });
-  };
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-8 font-sans">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* ENCABEZADO */}
+        <header className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-900 text-white p-2.5 rounded-lg font-bold text-xl tracking-wider">
+              DOSEP
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">Módulo de Liquidación y Coseguros</h1>
+              <p className="text-xs text-slate-500">Herramienta de Refinanciación y Ajuste de Valores</p>
+            </div>
+          </div>
+        </header>
 
-  // ==========================================
-  // FUNCIONES: PLAN MUJER
-  // ==========================================
-  const generarInformePlanMujer = () => {
-    const d = pmDni.trim();
-    const f = pmFechaNac.trim();
-    
-    if (!d) { alert("Por favor, ingresá el DNI de la paciente."); return; }
-    if (!f) { alert("Por favor, ingresá una fecha de nacimiento."); return; }
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-    let dayStr, monthStr, yearStr;
-    let fechaLimpia = f.replace(/\s/g, '');
+          {/* ----------------------------------------------------------------- */}
+          {/* SECCIÓN 1: CALCULADORA DE AJUSTE */}
+          {/* ----------------------------------------------------------------- */}
+          <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
+              <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-bold text-slate-800">Calculadora de Ajuste</h2>
+            </div>
 
-    if (fechaLimpia.includes('/')) {
-        [dayStr, monthStr, yearStr] = fechaLimpia.split('/');
-    } else if (fechaLimpia.includes('-')) {
-        let partes = fechaLimpia.split('-');
-        if (partes[0].length === 4) { [yearStr, monthStr, dayStr] = partes; } 
-        else { [dayStr, monthStr, yearStr] = partes; }
-    } else if (fechaLimpia.length === 8) {
-        dayStr = fechaLimpia.substring(0, 2);
-        monthStr = fechaLimpia.substring(2, 4);
-        yearStr = fechaLimpia.substring(4, 8);
-    } else {
-        alert("No pudimos leer la fecha. Asegurate de que tenga el formato DD/MM/AAAA.");
-        return;
-    }
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Valor Original
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-800 text-sm"
+                  value={calcValorOriginal}
+                  onChange={(e) => setCalcValorOriginal(e.target.value)}
+                  placeholder="Ej: 82300"
+                />
+              </div>
 
-    if (!yearStr || yearStr.length < 4 || !monthStr || !dayStr) {
-        alert("Revisá que la fecha esté completa, incluyendo el año de 4 dígitos (ej: 1988).");
-        return;
-    }
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Valor Final (Nuevo)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-800 text-sm"
+                  value={calcValorFinal}
+                  onChange={(e) => setCalcValorFinal(e.target.value)}
+                  placeholder="Ej: 75000"
+                />
+              </div>
 
-    dayStr = dayStr.padStart(2, '0');
-    monthStr = monthStr.padStart(2, '0');
-    const fechaNacFormateada = `\({dayStr}/\){monthStr}/${yearStr}`;
+              <button
+                type="button"
+                onClick={handleCalcularDiferencia}
+                className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors text-sm shadow-sm"
+              >
+                CALCULAR DIFERENCIA
+              </button>
 
-    const anioNacimiento = parseInt(yearStr);
-    const mesNacimiento = parseInt(monthStr) - 1;
-    const diaNacimiento = parseInt(dayStr);
-    const hoy = new Date();
-    
-    let edad = hoy.getFullYear() - anioNacimiento;
-    const m = hoy.getMonth() - mesNacimiento;
-    if (m < 0 || (m === 0 && hoy.getDate() < diaNacimiento)) { edad--; }
+              {/* RESULTADO CON 5 DECIMALES */}
+              {resultadoAjuste && (
+                <div
+                  className={`p-4 rounded-lg text-center space-y-2 border ${
+                    resultadoAjuste.tipo === 'DISMINUCIÓN'
+                      ? 'bg-red-50 border-red-200 text-red-700'
+                      : resultadoAjuste.tipo === 'AUMENTO'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-slate-100 border-slate-200 text-slate-700'
+                  }`}
+                >
+                  <p className="text-xs font-bold tracking-wider uppercase">
+                    {resultadoAjuste.tipo}
+                  </p>
+                  <p className="text-3xl font-extrabold tracking-tight">
+                    {resultadoAjuste.porcentajeStr}%
+                  </p>
+                  <p className="text-[11px] text-slate-500 italic">
+                    (Precisión extendida a 5 decimales)
+                  </p>
 
-    setPmResultado({ dni: d, edad, dia: dayStr, mes: monthStr, anio: anioNacimiento });
-    guardarEnHistorialPM(d, fechaNacFormateada);
-    setPmDni('');
-    setPmFechaNac('');
-  };
+                  <button
+                    type="button"
+                    onClick={handleTransferirPorcentaje}
+                    className="mt-2 text-xs text-indigo-700 hover:text-indigo-900 underline font-medium block mx-auto"
+                  >
+                    Usar este porcentaje en Coseguro →
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
 
-  const guardarEnHistorialPM = (d: string, fNac: string) => {
-    const ahora = new Date();
-    const fechaISO = ahora.toISOString().split('T')[0];
-    const dia = String(ahora.getDate()).padStart(2, '0');
-    const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-    const anio = ahora.getFullYear();
-    const hora = String(ahora.getHours()).padStart(2, '0');
-    const min = String(ahora.getMinutes()).padStart(2, '0');
-    const fechaLegible = `\({dia}/\){mes}/\({anio}\){hora}:${min}`;
+          {/* ----------------------------------------------------------------- */}
+          {/* SECCIÓN 2: MÓDULO COSEGURO */}
+          {/* ----------------------------------------------------------------- */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* PANEL DE CONFIGURACIÓN DEL COSEGURO */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-lg font-bold text-slate-800 tracking-wide uppercase">COSEGURO</h2>
 
-    const newRecord = { fechaISO, fechaLegible, dni: d, fechaNac: fNac, id: crypto.randomUUID() };
-    const updated = [newRecord, ...pmHistorial];
-    setPmHistorial(updated);
-    localStorage.setItem('historialPlanMujer', JSON.stringify(updated));
-  };
+              <div className="p-4 border border-slate-200 rounded-lg max-w-md bg-slate-50/50">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      Tipo de Actualización:
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      value={tipoActualizacion}
+                      onChange={(e) => setTipoActualizacion(e.target.value as 'Negativo' | 'Positivo')}
+                    >
+                      <option value="Negativo">Negativo</option>
+                      <option value="Positivo">Positivo</option>
+                    </select>
+                  </div>
 
-  const descargarReportePM = () => {
-    if (!pmDesde || !pmHasta) {
-        alert("Por favor, seleccioná la fecha de inicio y fin para armar el reporte.");
-        return;
-    }
-    const filtrados = pmHistorial.filter(item => item.fechaISO >= pmDesde && item.fechaISO <= pmHasta);
-    if (filtrados.length === 0) {
-        alert("No se encontraron consultas en ese rango de fechas.");
-        return;
-    }
+                  <div>
+                    <label className="block text-xs font-medium text-blue-700 font-semibold mb-1">
+                      Porcentaje:
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full px-3 py-2 border-2 border-blue-600 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 font-bold text-slate-900"
+                        value={porcentajeActualizacion}
+                        onChange={(e) => setPorcentajeActualizacion(e.target.value)}
+                        placeholder="8.86999"
+                      />
+                      <span className="absolute right-3 top-2 text-sm text-slate-500 font-bold">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-    let csvContent = "Fecha de Consulta;DNI;Fecha de Nacimiento\n";
-    filtrados.forEach(row => { csvContent += `\({row.fechaLegible};\){row.dni};${row.fechaNac}\n`; });
+            {/* TABLA DE SERVICIOS */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-800 text-white text-xs font-semibold uppercase tracking-wider">
+                      <th className="py-3 px-4 border-r border-slate-700">Codigo</th>
+                      <th className="py-3 px-4 border-r border-slate-700">Nombre del Servicio</th>
+                      <th className="py-3 px-4 border-r border-slate-700">Tipo</th>
+                      <th className="py-3 px-4 border-r border-slate-700">Categoria</th>
+                      <th className="py-3 px-4 border-r border-slate-700 text-right">Valor</th>
+                      <th className="py-3 px-4 border-r border-slate-700 text-right">Coseguro</th>
+                      <th className="py-3 px-4 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-slate-700 text-xs">
+                    {servicios.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400 italic">
+                          No hay servicios cargados.
+                        </td>
+                      </tr>
+                    ) : (
+                      servicios.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 font-medium text-slate-900 border-r border-slate-200">
+                            {item.codigo}
+                          </td>
+                          <td className="py-3 px-4 border-r border-slate-200 font-semibold">
+                            {item.nombre}
+                          </td>
+                          <td className="py-3 px-4 border-r border-slate-200">
+                            {item.tipo}
+                          </td>
+                          <td className="py-3 px-4 border-r border-slate-200">
+                            {item.categoria}
+                          </td>
+                          <td className="py-3 px-4 border-r border-slate-200 text-right font-medium">
+                            ${item.valor.toFixed(1)}
+                          </td>
+                          <td className="py-3 px-4 border-r border-slate-200 text-right font-bold text-slate-900 bg-blue-50/30">
+                            ${item.coseguro.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleEliminarServicio(item.id)}
+                              className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                              title="Eliminar servicio"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Reporte_PlanMujer_\({pmDesde}_al_\){pmHasta}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+              {/* BOTONES DE ACCIÓN */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMostrarFormNuevo(!mostrarFormNuevo)}
+                  className="bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 font-semibold py-2 px-4 rounded-lg transition-colors text-sm shadow-sm"
+                >
+                  {mostrarFormNuevo ? 'Cancelar' : 'Agregar Servicio'}
+                </button>
 
-  const renderTarjetaPlan = (titulo: string, min: number, max: number) => {
-    if (!pmResultado) return null;
-    const { edad, dia, mes, anio } = pmResultado;
-    const anioActivacion = anio + min;
-    const anioVencimiento = anio + max;
-    const fechaActivacion = `\({dia}/\){mes}/${anioActivacion}`;
-    const fechaVencimiento = `\({dia}/\){mes}/${anioVencimiento}`;
+                <button
+                  type="button"
+                  onClick={handleAplicarCambios}
+                  className="bg-slate-300 hover:bg-slate-400 text-slate-800 font-semibold py-2 px-5 rounded-lg transition-colors text-sm shadow-sm"
+                >
+                  Aplicar Cambios
+                </button>
+              </div>
 
-    let estadoHtml = null;
-    if (edad >= max) {
-        estadoHtml =
+              {/* FORMULARIO AGREGAR SERVICIO */}
+              {mostrarFormNuevo && (
+                <form onSubmit={handleAgregarServicio} className="p-4 border-t border-slate-200 bg-indigo-50/40 space-y-3">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase">Nuevo Servicio</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <input
+                      type="text"
+                      placeholder="Código (ej: 32.01-SC)"
+                      className="px-3 py-2 border rounded-lg"
+                      value={nuevoServicio.codigo}
+                      onChange={(e) => setNuevoServicio({ ...nuevoServicio, codigo: e.target.value })}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Nombre del servicio"
+                      className="px-3 py-2 border rounded-lg md:col-span-2"
+                      value={nuevoServicio.nombre}
+                      onChange={(e) => setNuevoServicio({ ...nuevoServicio, nombre: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Valor ($)"
+                      className="px-3 py-2 border rounded-lg"
+                      value={nuevoServicio.valor}
+                      onChange={(e) => setNuevoServicio({ ...nuevoServicio, valor: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Coseguro ($ - opcional)"
+                      className="px-3 py-2 border rounded-lg"
+                      value={nuevoServicio.coseguro}
+                      onChange={(e) => setNuevoServicio({ ...nuevoServicio, coseguro: e.target.value })}
+                    />
+                    <button
+                      type="submit"
+                      className="bg-indigo-900 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-950 transition-colors"
+                    >
+                      Guardar
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  );
+}
