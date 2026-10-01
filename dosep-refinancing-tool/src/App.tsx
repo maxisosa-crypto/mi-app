@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import ChatAssistant from './components/ChatAssistant';
+import { ChatAssistant } from './components/ChatAssistant';
 
 // -----------------------------------------------------------------------------
 // INTERFACES Y TIPOS
