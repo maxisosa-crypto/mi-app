@@ -1351,9 +1351,9 @@ export default function App() {
                         </div>
                       ) : result ? (
                         <>
-                          <div className="flex justify-between items-center">
+                          <div className="flex flex-wrap items-center justify-between gap-4">
                             <h3 className="font-bold text-slate-700 text-lg">Lote de financiaciones actuales</h3>
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
                               <button 
                                 onClick={() => copyToClipboard(generatedMails[0]?.content || '')}
                                 className="bg-dosep-blue text-white px-4 py-2 rounded text-sm font-semibold hover:bg-dosep-dark transition-all flex items-center gap-2 shadow-sm"
@@ -1363,276 +1363,144 @@ export default function App() {
                               </button>
                               <button 
                                 onClick={exportRefinanceExcel}
-                                className="bg-green-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-green-700 transition-all flex items-center gap-2 shadow-sm"
+                                className="bg-emerald-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-sm"
                               >
-                                <Download size={16} />
-                                EXPORTAR EXCEL
+                                <FileSpreadsheet size={16} />
+                                EXPORTAR A EXCEL
                               </button>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-dosep-blue/5 border border-dosep-blue/20 rounded-xl p-4 flex items-center gap-4">
-                              <div className="bg-dosep-blue text-white p-3 rounded-lg shadow-sm">
-                                <Calculator size={24} />
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-dosep-blue font-bold uppercase tracking-wider">Total Reducción</p>
-                                <p className="text-2xl font-black text-slate-800">
-                                  ${result.lots.reduce((acc, lot) => acc + lot.cancelledAmount, 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="bg-green-50 border border-green-100 rounded-xl p-4 flex items-center gap-4">
-                              <div className="bg-green-600 text-white p-3 rounded-lg shadow-sm">
-                                <ListChecks size={24} />
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Lotes Afectados</p>
-                                <p className="text-2xl font-black text-slate-800">{result.lots.length}</p>
-                              </div>
-                            </div>
-                            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 flex items-center gap-4">
-                              <div className="bg-orange-500 text-white p-3 rounded-lg shadow-sm">
-                                <RefreshCw size={24} />
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Órdenes Procesadas</p>
-                                <p className="text-2xl font-black text-slate-800">
-                                  {result.lots.reduce((acc, lot) => acc + lot.orders.length, 0) + result.otherOrders.length}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
+                          {/* Lotes Desglosados */}
                           {result.lots.map((lot) => (
-                            <section key={lot.lotNumber} className="bg-white rounded shadow-sm border border-dosep-border overflow-hidden">
+                            <div key={lot.lotNumber} className="bg-white rounded shadow-sm border border-dosep-border overflow-hidden">
                               <div 
-                                className="p-4 bg-slate-50 border-b border-dosep-border flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors group"
                                 onClick={() => setExpandedLot(expandedLot === lot.lotNumber ? null : lot.lotNumber)}
+                                className="p-4 bg-slate-50 border-b border-dosep-border flex items-center justify-between cursor-pointer hover:bg-slate-100/80 transition-colors"
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`p-1 rounded-full transition-colors ${expandedLot === lot.lotNumber ? 'bg-dosep-blue text-white' : 'bg-slate-200 text-slate-500 group-hover:bg-slate-300'}`}>
-                                    <ChevronDown 
-                                      size={16} 
-                                      className={`transition-transform duration-300 ${expandedLot === lot.lotNumber ? 'rotate-180' : ''}`} 
-                                    />
+                                  <div className="p-2 bg-dosep-blue/10 text-dosep-blue rounded-lg font-mono text-xs font-bold">
+                                    LOTE #{lot.lotNumber}
                                   </div>
                                   <div>
-                                    <h4 className="font-bold text-slate-700">Lote DPP Nº {lot.lotNumber}</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium uppercase">
-                                      {expandedLot === lot.lotNumber ? 'Ocultar desglose' : 'Ver desglose de cuotas'}
+                                    <p className="text-sm font-bold text-slate-800">
+                                      Ajustado: ${lot.adjustedTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                      Original: ${lot.originalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })} | Reducción: -${lot.cancelledAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                                     </p>
                                   </div>
                                 </div>
-                                <div className="flex gap-4">
-                                  <div className="text-right">
-                                    <p className="text-[10px] text-slate-400 uppercase font-medium">Crédito Aplicado</p>
-                                    <p className="text-sm font-bold text-red-600">-${lot.cancelledAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="text-[10px] text-slate-400 uppercase font-medium">Nuevo Total</p>
-                                    <p className="text-sm font-bold text-slate-700">${lot.adjustedTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
-                                  </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold px-2 py-1 bg-slate-200 text-slate-700 rounded">
+                                    Cuota: ${lot.installmentAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <ChevronDown className={`text-slate-400 transition-transform ${expandedLot === lot.lotNumber ? 'rotate-180' : ''}`} size={18} />
                                 </div>
                               </div>
-                              
-                              <AnimatePresence>
-                                {expandedLot === lot.lotNumber && (
-                                  <motion.div 
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.3, ease: "easeInOut" }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="p-4 bg-slate-50/50 border-t border-dosep-border grid grid-cols-1 md:grid-cols-5 gap-4">
-                                      <div className="bg-white p-3 rounded border border-dosep-border shadow-sm">
-                                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Estado de Cuotas</p>
-                                        <div className="flex justify-between items-end">
+
+                              {expandedLot === lot.lotNumber && (
+                                <div className="p-6 space-y-6 animate-fade-in">
+                                  {/* Órdenes en el lote */}
+                                  <div>
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Órdenes Asociadas</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {lot.orders.map((order) => (
+                                        <div key={order.id} className="p-3 border border-dosep-border rounded bg-slate-50 flex items-center justify-between">
                                           <div>
-                                            <p className="text-xs text-slate-600"><span className="font-bold text-green-600">{lot.details?.cuotasCobradas}</span> Cobradas</p>
-                                            <p className="text-xs text-slate-600"><span className="font-bold text-orange-600">{lot.details?.cuotasRestantes}</span> Pendientes</p>
+                                            <p className="text-sm font-bold text-slate-700">Orden: {order.orderNumber}</p>
+                                            <p className="text-xs text-slate-500">DNI: {order.dni} {order.isFullyPaidLot ? '(Crédito Recibido)' : ''}</p>
                                           </div>
-                                          <div className="text-right">
-                                            <p className="text-[10px] text-slate-400">Total: {lot.installments.length}</p>
+                                          <div className="flex items-center gap-3">
+                                            <span className="text-sm font-bold text-slate-700">${order.totalOrder.toLocaleString('es-AR')}</span>
+                                            <button 
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setCancellingOrder({ order, lotNumber: lot.lotNumber });
+                                              }}
+                                              className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded transition-colors"
+                                              title="Anular Orden"
+                                            >
+                                              <Trash2 size={16} />
+                                            </button>
                                           </div>
                                         </div>
-                                      </div>
-                                      <div className="bg-white p-3 rounded border border-dosep-border shadow-sm">
-                                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Cálculo de Reducción</p>
-                                        <p className="text-xs text-slate-600">Total Original: <span className="font-medium">${lot.originalTotal.toLocaleString('es-AR')}</span></p>
-                                        <p className="text-xs text-red-600 font-bold">Reducción: -${lot.cancelledAmount.toLocaleString('es-AR')}</p>
-                                        <p className="text-[9px] text-slate-400 font-medium">({lot.details?.porcentajeCancelado.toFixed(1)}% del lote)</p>
-                                      </div>
-                                      <div className="bg-white p-3 rounded border border-dosep-border shadow-sm">
-                                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Crédito por Pagos</p>
-                                        <p className="text-xs text-slate-600">Monto Acreditado: <span className="font-bold text-dosep-teal">${lot.details?.totalCancelado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span></p>
-                                        <p className="text-[9px] text-slate-500 mt-1 leading-tight">Monto equivalente a las cuotas que ya había pagado el afiliado.</p>
-                                      </div>
-                                      <div className="bg-white p-3 rounded border border-dosep-border shadow-sm">
-                                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Nueva Cuota Promedio</p>
-                                        <p className="text-lg font-black text-dosep-blue">${lot.details?.nuevoValorCuota.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
-                                        <p className="text-[9px] text-slate-400 italic">* Ajustada para cierre exacto</p>
-                                      </div>
-                                      <div className="bg-white p-3 rounded border border-dosep-border shadow-sm flex flex-col justify-center gap-2">
-                                        <button 
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            copyToClipboard(lot.details?.nuevoValorCuota.toFixed(2) || '');
-                                          }}
-                                          className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 py-1.5 px-2 rounded font-bold transition-colors flex items-center justify-center gap-1"
-                                        >
-                                          Copiar Cuota
-                                        </button>
-                                      </div>
+                                      ))}
                                     </div>
+                                  </div>
 
-                                    <div className="p-4 bg-slate-50/50 border-t border-dosep-border">
-                                      <div className="mb-4">
-                                        <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2 mb-3">
-                                          <FileText size={14} />
-                                          Órdenes de Afiliados en este Lote
-                                        </h5>
-                                        <div className="bg-white border border-dosep-border rounded overflow-hidden">
-                                          <table className="w-full text-left text-xs">
-                                            <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold border-b border-dosep-border">
-                                              <tr>
-                                                <th className="px-4 py-2">Nro Orden</th>
-                                                <th className="px-4 py-2">DNI Afiliado</th>
-                                                <th className="px-4 py-2 text-right">Crédito Aportado</th>
-                                                <th className="px-4 py-2 text-center">Acciones</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-dosep-border">
-                                              {lot.orders.map((order) => {
-                                                const valorCuotaOrigen = order.totalInstallments > 0 ? order.totalOrder / order.totalInstallments : 0;
-                                                const montoPagadoAFavor = order.isFullyPaidLot ? (valorCuotaOrigen * order.paidInstallments) : order.totalOrder;
-                                                
-                                                return (
-                                                  <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
-                                                    <td className="px-4 py-2.5 font-bold text-slate-700">{order.orderNumber}</td>
-                                                    <td className="px-4 py-2.5 text-slate-600">{order.dni}</td>
-                                                    <td className="px-4 py-2.5 text-right font-bold text-dosep-blue">${montoPagadoAFavor.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                                    <td className="px-4 py-2.5 text-center">
-                                                      <button 
-                                                        onClick={() => setCancellingOrder({ order, lotNumber: lot.lotNumber })}
-                                                        className="bg-red-50 text-red-500 p-1.5 rounded hover:bg-red-500 hover:text-white transition-colors"
-                                                        title="Anular Orden"
-                                                      >
-                                                        <Trash2 size={12} />
-                                                      </button>
-                                                    </td>
-                                                  </tr>
-                                                );
-                                              })}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      </div>
-
-                                      <div className="mb-2">
-                                        <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2 mb-3">
-                                          <ListChecks size={14} />
-                                          Desglose Detallado de Cuotas
-                                        </h5>
-                                        <div className="bg-white border border-dosep-border rounded overflow-hidden">
-                                          <table className="w-full text-left text-xs">
-                                            <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold border-b border-dosep-border">
-                                              <tr>
-                                                <th className="px-4 py-2">Nro Cuota</th>
-                                                <th className="px-4 py-2">ID Afiliado</th>
-                                                <th className="px-4 py-2">Estado</th>
-                                                <th className="px-4 py-2 text-right">Monto</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-dosep-border">
-                                              {lot.installments.map((inst) => (
-                                                <tr key={inst.number} className="hover:bg-slate-50 transition-colors">
-                                                  <td className="px-4 py-2.5 text-slate-400 font-medium">Cuota #{inst.number}</td>
-                                                  <td className="px-4 py-2.5 font-bold text-slate-700">{inst.affiliateId}</td>
-                                                  <td className="px-4 py-2.5">
-                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${inst.status === 'COBRADA' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                      {inst.status}
-                                                    </span>
-                                                  </td>
-                                                  <td className="px-4 py-2.5 text-right font-mono font-bold text-dosep-blue">${inst.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                                </tr>
-                                              ))}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      </div>
+                                  {/* Tabla Desglose de Cuotas */}
+                                  <div>
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Cronograma de Cuotas Recalculado</h4>
+                                    <div className="border border-dosep-border rounded overflow-hidden">
+                                      <table className="w-full text-left text-xs">
+                                        <thead className="bg-slate-100 text-slate-600 font-bold border-b border-dosep-border">
+                                          <tr>
+                                            <th className="p-2.5 text-center">Nº Cuota</th>
+                                            <th className="p-2.5">ID Afiliado (Cta CNT)</th>
+                                            <th className="p-2.5 text-center">Estado</th>
+                                            <th className="p-2.5 text-right">Monto Cuota</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {lot.installments.map((inst) => (
+                                            <tr key={inst.number} className={inst.status === 'COBRADA' ? 'bg-slate-50/60 text-slate-400' : 'hover:bg-blue-50/30'}>
+                                              <td className="p-2.5 text-center font-bold">{inst.number}</td>
+                                              <td className="p-2.5 font-mono">{inst.affiliateId}</td>
+                                              <td className="p-2.5 text-center">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${inst.status === 'COBRADA' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                  {inst.status}
+                                                </span>
+                                              </td>
+                                              <td className="p-2.5 text-right font-bold text-slate-700">
+                                                ${inst.amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
                                     </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </section>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           ))}
 
+                          {/* Órdenes sin lote */}
                           {result.otherOrders.length > 0 && (
-                            <section className="bg-white rounded shadow-sm border border-dosep-border overflow-hidden">
-                              <div className="p-4 bg-slate-50 border-b border-dosep-border">
-                                <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                                  <Wallet size={18} className="text-dosep-blue" />
-                                  Otras Órdenes Procesadas (Caja / Crédito)
-                                </h3>
-                              </div>
-                              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {result.otherOrders.map((order) => (
-                                  <div key={order.id} className="p-4 border border-dosep-border rounded bg-slate-50/50 flex justify-between items-center group">
+                            <div className="bg-white rounded shadow-sm border border-dosep-border p-6">
+                              <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                                <CreditCard size={18} className="text-dosep-blue" />
+                                Otras Órdenes Procesadas (Caja / Crédito / Planes Especiales)
+                              </h4>
+                              <div className="space-y-3">
+                                {result.otherOrders.map((o) => (
+                                  <div key={o.id} className="p-3 border border-dosep-border rounded bg-slate-50 flex items-center justify-between">
                                     <div>
-                                      <p className="text-sm font-bold text-slate-700">Orden: {order.orderNumber}</p>
-                                      <p className="text-xs text-slate-500">DNI: {order.dni}</p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-[10px] font-bold text-dosep-blue bg-dosep-blue/10 px-2 py-0.5 rounded uppercase">
-                                          {order.paymentMethod}
-                                        </span>
-                                        <span className="text-sm font-bold text-slate-600">${order.totalOrder.toLocaleString('es-AR')}</span>
-                                      </div>
+                                      <p className="text-sm font-bold text-slate-700">Orden: {o.orderNumber} | DNI: {o.dni}</p>
+                                      <p className="text-xs text-slate-500">Medio: <span className="uppercase font-semibold">{o.paymentMethod}</span> {o.isSpecialPlan ? '(Plan Especial)' : ''}</p>
                                     </div>
-                                    <button 
-                                      onClick={() => setCancellingOrder({ order })}
-                                      className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white"
-                                      title="Anular Orden"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-sm font-bold text-slate-700">${o.totalOrder.toLocaleString('es-AR')}</span>
+                                      <button 
+                                        onClick={() => setCancellingOrder({ order: o })}
+                                        className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded transition-colors"
+                                        title="Anular Orden"
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
-                            </section>
+                            </div>
                           )}
-
-                          {generatedMails.map((mail, idx) => (
-                            <section key={idx} className="bg-white rounded shadow-sm border border-dosep-border overflow-hidden">
-                              <div className="p-4 bg-dosep-blue text-white flex items-center justify-between">
-                                <h4 className="font-bold flex items-center gap-2">
-                                  <Mail size={18} />
-                                  Solicitud Formal de Modificación
-                                </h4>
-                                <button 
-                                  onClick={() => copyToClipboard(mail.content)}
-                                  className="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded text-xs font-bold transition-colors flex items-center gap-2"
-                                >
-                                  <ClipboardCheck size={14} />
-                                  COPIAR TEXTO
-                                </button>
-                              </div>
-                              <div className="p-6 bg-slate-50">
-                                <pre className="text-xs font-sans whitespace-pre-wrap text-slate-600 leading-relaxed italic">
-                                  {mail.content}
-                                </pre>
-                              </div>
-                            </section>
-                          ))}
                         </>
                       ) : (
-                        <div className="bg-white rounded shadow-sm border border-dashed border-dosep-border p-20 flex flex-col items-center justify-center text-center">
-                          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                            <Search className="text-slate-200" size={32} />
-                          </div>
-                          <p className="text-slate-400 font-medium">Cargue órdenes y procese para ver resultados</p>
+                        <div className="bg-white rounded shadow-sm border border-dashed border-dosep-border p-12 text-center flex flex-col items-center justify-center">
+                          <FileText size={48} className="text-slate-300 mb-4" />
+                          <h3 className="text-base font-bold text-slate-600">Sin procesamiento activo</h3>
+                          <p className="text-xs text-slate-400 max-w-sm mt-1">Cargá las órdenes en el panel de la izquierda y hacé clic en "PROCESAR LISTA" para ver los resultados desglosados.</p>
                         </div>
                       )}
                     </motion.div>
@@ -1640,115 +1508,72 @@ export default function App() {
                 </AnimatePresence>
               </div>
             </div>
-            </div>
+          </div>
           )}
+
         </main>
       </div>
 
-      {/* MODALES Y OVERLAYS (Solo para refinanciacion) */}
-      <AnimatePresence>
-        {processing && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center max-w-xs w-full border border-dosep-border"
-            >
-              <div className="relative w-20 h-20 mb-6">
-                <div className="absolute inset-0 border-4 border-dosep-blue/10 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-dosep-blue border-t-transparent rounded-full animate-spin"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <RefreshCw className="text-dosep-blue animate-pulse" size={32} />
-                </div>
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">Procesando Lote</h3>
-              <p className="text-sm text-slate-500 text-center leading-relaxed">
-                Estamos recalculando los lotes, cuotas y generando los reportes correspondientes...
-              </p>
-              <div className="mt-6 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 1.5, ease: "easeInOut" }}
-                  className="h-full bg-dosep-blue"
-                />
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {/* ==========================================
+          MODAL DE ANULACIÓN
+          ========================================== */}
       <AnimatePresence>
         {cancellingOrder && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-          >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-xl shadow-2xl border border-dosep-border w-full max-w-md overflow-hidden"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-lg shadow-xl border border-dosep-border max-w-md w-full overflow-hidden"
             >
-              <div className="p-6 border-b border-dosep-border bg-red-50">
-                <h3 className="text-lg font-bold text-red-700 flex items-center gap-2">
-                  <AlertCircle size={20} /> Anular Orden
-                </h3>
-                <p className="text-xs text-red-600 mt-1">Esta acción es irreversible y se registrará en el historial.</p>
+              <div className="p-4 bg-red-50 border-b border-red-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
+                  <AlertCircle size={18} />
+                  Confirmar Anulación de Orden
+                </div>
+                <button onClick={() => { setCancellingOrder(null); setCancelDni(''); }} className="text-slate-400 hover:text-slate-600">
+                  <X size={18} />
+                </button>
               </div>
               <div className="p-6 space-y-4">
-                <div className="bg-slate-50 p-4 rounded border border-dosep-border">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Detalles de la Orden</span>
-                    <span className="text-[10px] font-bold text-dosep-blue bg-dosep-blue/10 px-2 py-0.5 rounded uppercase">
-                      {cancellingOrder.order.paymentMethod}
-                    </span>
-                  </div>
-                  <p className="text-sm font-bold text-slate-700">Nº Orden: {cancellingOrder.order.orderNumber}</p>
-                  <p className="text-sm text-slate-600">Monto: ${cancellingOrder.order.totalOrder.toLocaleString('es-AR')}</p>
-                  {cancellingOrder.lotNumber && (
-                    <p className="text-xs text-slate-500 mt-1">Lote Asociado: {cancellingOrder.lotNumber}</p>
-                  )}
-                </div>
-
+                <p className="text-xs text-slate-600">
+                  Está por anular la orden <strong className="text-slate-800">{cancellingOrder.order.orderNumber}</strong> de ${cancellingOrder.order.totalOrder.toLocaleString('es-AR')}. 
+                  Por seguridad, ingrese el DNI del afiliado para confirmar.
+                </p>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500">Confirmar DNI del Afiliado</label>
+                  <label className="text-xs font-bold text-slate-500">DNI del Afiliado</label>
                   <input 
-                    type="text" value={cancelDni} onChange={(e) => setCancelDni(e.target.value)}
-                    className="w-full border border-dosep-border rounded px-3 py-2 text-sm focus:border-red-500 outline-none transition-all"
-                    placeholder="Ingrese el DNI para confirmar"
+                    type="text" 
+                    value={cancelDni}
+                    onChange={(e) => setCancelDni(e.target.value)}
+                    placeholder={`Ingresá ${cancellingOrder.order.dni}`}
+                    className="w-full border border-dosep-border rounded px-3 py-2 text-sm focus:border-red-500 outline-none"
                   />
                 </div>
               </div>
-              <div className="p-6 bg-slate-50 border-t border-dosep-border flex gap-3">
+              <div className="p-4 bg-slate-50 border-t border-dosep-border flex justify-end gap-2">
                 <button 
                   onClick={() => { setCancellingOrder(null); setCancelDni(''); }}
-                  className="flex-1 px-4 py-2 rounded border border-slate-200 text-slate-600 font-bold text-sm hover:bg-white transition-all"
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded transition-colors"
                 >
-                  CANCELAR
+                  Cancelar
                 </button>
                 <button 
-                  onClick={handleCancelOrder} disabled={!cancelDni}
-                  className="flex-1 px-4 py-2 rounded bg-red-600 text-white font-bold text-sm hover:bg-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleCancelOrder}
+                  className="px-4 py-2 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                 >
-                  ANULAR ORDEN
+                  Anular Orden
                 </button>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      `}} />
-      
-      {/* CHAT ASSISTANT */}
-      <ChatAssistant currentContext={{
-        vistaActiva, dni, orderNumber, totalOrder, totalInstallments, paidInstallments,
-        paymentMethod, isSpecialPlan, result, pendingOrdersCount: pendingOrders.length
-      }} />
+      {/* ==========================================
+          ASISTENTE DE CHAT INTERACTIVO
+          ========================================== */}
+      <ChatAssistant />
     </div>
   );
 }
@@ -1756,27 +1581,61 @@ export default function App() {
 // ==========================================
 // COMPONENTES AUXILIARES
 // ==========================================
-function Skeleton({ className }: { className?: string; key?: React.Key }) {
-  return <div className={`animate-pulse bg-slate-200 rounded ${className}`} />;
+function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse bg-slate-200 ${className}`} />;
 }
 
-function SidebarItem({ icon, label, active = false, hasChevron = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, hasChevron?: boolean, onClick?: () => void }) {
+function SidebarItem({ 
+  icon, 
+  label, 
+  active = false, 
+  onClick, 
+  hasChevron = false 
+}: { 
+  icon: React.ReactNode; 
+  label: string; 
+  active?: boolean; 
+  onClick?: () => void; 
+  hasChevron?: boolean; 
+}) {
   return (
-    <div onClick={onClick} className={`flex items-center justify-between px-6 py-3 cursor-pointer transition-colors ${active ? 'bg-dosep-dark border-l-4 border-dosep-teal' : 'hover:bg-dosep-dark/50'}`}>
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center justify-between px-6 py-3 text-sm font-medium transition-all ${
+        active 
+          ? 'bg-white/10 text-white border-r-4 border-dosep-teal font-bold' 
+          : 'text-white/70 hover:bg-white/5 hover:text-white'
+      }`}
+    >
       <div className="flex items-center gap-3">
-        <span className={active ? 'text-dosep-teal' : 'text-white/70'}>{icon}</span>
-        <span className={`text-sm ${active ? 'font-bold' : 'font-medium opacity-80'}`}>{label}</span>
+        {icon}
+        <span>{label}</span>
       </div>
-      {hasChevron && <ChevronRight size={14} className="opacity-40" />}
-    </div>
+      {hasChevron && <ChevronRight size={14} className="opacity-50" />}
+    </button>
   );
 }
 
-function SidebarSubItem({ label, active = false, hasChevron = false, onClick }: { label: string, active?: boolean, hasChevron?: boolean, onClick?: () => void }) {
+function SidebarSubItem({ 
+  label, 
+  active = false, 
+  onClick 
+}: { 
+  label: string; 
+  active?: boolean; 
+  onClick?: () => void; 
+}) {
   return (
-    <div onClick={onClick} className={`flex items-center justify-between pl-14 pr-6 py-2.5 cursor-pointer transition-colors ${active ? 'bg-dosep-dark/40 font-bold' : 'hover:bg-dosep-dark/30'}`}>
-      <span className={`text-[13px] ${active ? 'text-dosep-teal' : 'text-white/60'}`}>{label}</span>
-      {hasChevron && <ChevronRight size={12} className="opacity-40" />}
-    </div>
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center pl-12 pr-6 py-2 text-xs transition-all ${
+        active 
+          ? 'text-dosep-teal font-bold' 
+          : 'text-white/60 hover:text-white'
+      }`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-current mr-2.5 opacity-60"></span>
+      <span>{label}</span>
+    </button>
   );
 }
